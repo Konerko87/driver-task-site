@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>司機任務</title>
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;background:#0b1220;color:#e5e7eb;}
+    .wrap{max-width:860px;margin:0 auto;padding:14px;}
+    .card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:14px;margin-bottom:12px;}
+    .title{font-size:18px;font-weight:800;margin-bottom:6px;}
+    .muted{color:#a3a3a3;font-size:13px;line-height:1.5;word-break:break-all}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;}
+    .pill{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);padding:6px 10px;border-radius:999px;font-size:13px;}
+    select{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);color:#e5e7eb;border-radius:10px;padding:8px 10px;font-size:14px;}
+    details{background:rgba(0,0,0,.25);border-radius:12px;padding:10px 12px;margin-top:10px;}
+    summary{cursor:pointer;font-weight:800;}
+    .task{padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08);}
+    .task:last-child{border-bottom:0;}
+    .big{font-size:16px;font-weight:850;}
+    .err{color:#fecaca;}
+    code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px;}
+    button{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);color:#e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px}
+  </style>
+
+  <!-- LIFF SDK：就算載不到，也會在畫面顯示錯誤 -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="title">司機任務</div>
+    <div id="status" class="muted">頁面已載入，準備初始化…</div>
+    <div id="debug" class="muted" style="margin-top:8px;"></div>
+
+    <div class="row" id="topRow" style="display:none;">
+      <div class="pill" id="pillDriver"></div>
+      <div class="pill" id="pillToday"></div>
+
+      <label class="muted">日期：</label>
+      <select id="dateSelect"></select>
+
+      <button id="refreshBtn" type="button">重新整理</button>
+    </div>
+  </div>
+
+  <div id="content"></div>
+
+  <div class="card">
+    <div class="muted">
+      若顯示「尚未綁定司機」：把畫面顯示的 <code>lineUserId</code> 填到 Google Sheet「司機對照」（enabled=TRUE）。
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== 只要確認這兩行是你的 =====
+  const LIFF_ID = "2008915809-vp9PFMVX";
+  const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbxY-cAz9uSlEo44YA7GAp6DYtAog3VTxLWWSAesQKiok2w2HxkOVOe_UnhNw5nV9K5C/exec";
+  const SHOW_USER_ID = true;
+
+  let currentUserId = null;
+
+  const statusEl = document.getElementById("status");
+  const debugEl  = document.getElementById("debug");
+
+  function setStatus(t, isErr=false){
+    statusEl.className = "muted" + (isErr ? " err" : "");
+    statusEl.textContent = t;
+  }
+  function setDebug(html){ debugEl.innerHTML = html || ""; }
+
+  function el(tag, cls, text){
+    const x = document.createElement(tag);
+    if (cls) x.className = cls;
+    if (text !== undefined) x.textContent = text;
+    return x;
+  }
+
+  // ===== JSONP（解 CORS）=====
+  function callApiJsonp({ uid, date }) {
+    return new Promise((resolve, reject) => {
+      const cbName = "cb_" + Math.random().toString(36).slice(2);
+      const script = document.createElement("script");
+
+      window[cbName] = (data) => { cleanup(); resolve(data); };
+
+      function cleanup(){
+        try { delete window[cbName]; } catch(e){ window[cbName] = undefined; }
+        if (script && script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      script.onerror = () => { cleanup(); reject(new Error("JSONP 載入失敗（請確認 GAS 有 mode=api_jsonp）")); };
+
+      const params = new URLSearchParams({
+        mode: "api_jsonp",
+        uid: uid || "",
+        date: date || "",
+        callback: cbName
+      });
+
+      script.src = GAS_EXEC_URL + "?" + params.toString();
+      document.head.appendChild(script);
+    });
+  }
+
+  function fillDateSelect(options, chosen){
+    const sel = document.getElementById("dateSelect");
+    sel.innerHTML = "";
+
+    const items = [];
+    if (options?.dMinus1) items.push({ label: `D-1（${options.dMinus1}）`, value: options.dMinus1 });
+    if (options?.d)       items.push({ label: `D（今天 ${options.d}）`, value: options.d });
+    if (options?.dPlus1)  items.push({ label: `D+1（${options.dPlus1}）`, value: options.dPlus1 });
+
+    for (const it of items){
+      const opt = document.createElement("option");
+      opt.value = it.value;
+      opt.textContent = it.label;
+      if (it.value === chosen) opt.selected = true;
+      sel.appendChild(opt);
+    }
+
+    sel.onchange = () => fetchDaily(sel.value);
+  }
+
+  function renderDaily(driverName, chosenDate, daily){
+    document.getElementById("topRow").style.display = "flex";
+    document.getElementById("pillDriver").textContent = `司機：${driverName}`;
+    document.getElementById("pillToday").textContent  = `今天：${chosenDate}`;
+
+    const d = (daily.block2?.transferDrivers || []).find(x => x.driver === driverName);
+    const items = d?.items || [];
+
+    const root = document.getElementById("content");
+    root.innerHTML = "";
+
+    if (!items.length){
+      const c = el("div","card");
+      c.appendChild(el("div",null,"今天沒有派到任務（或 driverName 對不上「姓名(轉)」）。"));
+      root.appendChild(c);
+      return;
+    }
+
+    const byPickup = new Map();
+    for (const it of items){
+      const k = it.pickup || "(未填提貨)";
+      if (!byPickup.has(k)) byPickup.set(k, []);
+      byPickup.get(k).push(it);
+    }
+
+    for (const [pickup, arr] of byPickup.entries()){
+      const card = el("div","card");
+      card.appendChild(el("div","big", pickup));
+
+      const det = el("details");
+      det.open = true;
+      det.appendChild(el("summary", null, `展開 / 收合（${arr.length}筆）`));
+
+      for (const it of arr){
+        const t = el("div","task");
+        t.appendChild(el("div", null, `${it.pickup || ""} → ${it.dropoff || ""}　${it.boards ?? ""}版`));
+        t.appendChild(el("div","muted", `等級：${it.grade || ""}　貨主：${it.owner || ""}　車號：${it.carNo || ""}`));
+        if (it.note) t.appendChild(el("div","muted", `備註：${it.note}`));
+        det.appendChild(t);
+      }
+
+      card.appendChild(det);
+      root.appendChild(card);
+    }
+  }
+
+  async function fetchDaily(dateTab){
+    setStatus("讀取任務中…");
+    try{
+      const res = await callApiJsonp({ uid: currentUserId, date: dateTab });
+
+      if (!res || res.ok === false) {
+        const msg = res?.message || "未知錯誤";
+        setStatus("讀取失敗：" + msg, true);
+        if (SHOW_USER_ID) setDebug(`lineUserId：<code>${currentUserId || "(尚未取得)"}</code>`);
+        return;
+      }
+
+      fillDateSelect(res.options, res.chosenDate);
+
+      if (SHOW_USER_ID) setDebug(`lineUserId：<code>${currentUserId}</code>`);
+      else setDebug("");
+
+      setStatus("OK");
+      renderDaily(res.driverName, res.chosenDate, res.daily);
+
+    } catch(e){
+      setStatus("讀取失敗：" + (e?.message || e), true);
+      if (SHOW_USER_ID) setDebug(`lineUserId：<code>${currentUserId || "(尚未取得)"}</code>`);
+    }
+  }
+
+  async function main(){
+    try{
+      setDebug(`網址：<code>${location.href}</code>`);
+
+      if (typeof liff === "undefined") {
+        setStatus("LIFF SDK 未載入（請用 LINE 開啟，或檢查網路）", true);
+        return;
+      }
+
+      setStatus("LIFF init 中…");
+      await liff.init({ liffId: LIFF_ID });
+
+      if (!liff.isLoggedIn()){
+        setStatus("需要登入，跳轉中…");
+        liff.login({ redirectUri: location.href });
+        return;
+      }
+
+      setStatus("取得 LINE 身分中…");
+      const profile = await liff.getProfile();
+      currentUserId = profile.userId;
+
+      document.getElementById("refreshBtn").onclick = () => fetchDaily(document.getElementById("dateSelect").value || "");
+
+      await fetchDaily("");
+
+    } catch(e){
+      setStatus("初始化失敗：" + (e?.message || e), true);
+      const ua = (navigator.userAgent || "").replace(/</g,"&lt;");
+      setDebug(`錯誤：<code>${(e?.message || e)}</code><br/>UA：<code>${ua}</code>`);
+    }
+  }
+
+  main();
+</script>
+</body>
+</html>
