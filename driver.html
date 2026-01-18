@@ -63,8 +63,6 @@
     .big{font-size:16px;font-weight:900;}
     .muted{color:var(--muted);font-size:13px;line-height:1.5;word-break:break-all}
     code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px;}
-    .grid{display:grid;grid-template-columns:1fr;gap:12px}
-    @media(min-width:860px){ .grid{grid-template-columns:1fr 1fr;} }
     .badge{
       display:inline-flex;align-items:center;gap:6px;
       background:rgba(255,255,255,.08);
@@ -93,7 +91,7 @@
       </div>
     </div>
 
-    <!-- 操作列（有任務/已綁定才會顯示） -->
+    <!-- 操作列（已綁定才會顯示） -->
     <div class="row hide" id="topRow">
       <div class="pill" id="pillDriver">司機：—</div>
       <div class="pill" id="pillToday">今天：—</div>
@@ -104,7 +102,7 @@
       <button id="refreshBtn" type="button">重新整理</button>
     </div>
 
-    <!-- 只在需要時顯示的訊息（減少噪音） -->
+    <!-- 精簡訊息 -->
     <div class="msg hide" id="msgBox"></div>
 
     <!-- Debug（可關） -->
@@ -115,18 +113,19 @@
   <div class="card hide" id="bindCard">
     <div class="sectionTitle">首次使用：請完成綁定</div>
     <div class="muted">
-      請輸入你的姓名（必須 <b>完全等於</b> 今日車趟表的「姓名(轉)」）。
+      請輸入你的姓名（會 <b>忽略前後數字</b> 來比對，例如：<code>5王小明1</code> 也能用 <code>王小明</code> 綁定）。
       綁定後你只會看到自己的任務。
     </div>
 
     <div class="row" style="margin-top:12px;">
-      <input id="bindName" type="text" placeholder="例如：王小明（需完全一致）" autocomplete="off" />
+      <input id="bindName" type="text" placeholder="例如：王小明（姓名(轉)）" autocomplete="off" />
       <button id="bindBtn" type="button">一鍵綁定</button>
       <button id="bindHelpBtn" type="button">我不知道要填什麼</button>
     </div>
 
     <div class="msg warn hide" id="bindHelp">
-      你要填的是「每日車趟分頁」裡的 <b>姓名(轉)</b>。如果你不確定，請回報給管理員確認表內名字。
+      你要填的是「每日車趟分頁」裡的 <b>姓名(轉)</b>（輸入時會自動忽略數字）。
+      如果你不確定，請回報給管理員確認表內名字。
     </div>
 
     <div class="divider"></div>
@@ -142,14 +141,14 @@
   <!-- FOOTER -->
   <div class="card">
     <div class="muted">
-      提醒：如果今天沒有任務，可能是今日未派單，或你的「姓名(轉)」尚未出現在當日分頁。
+      提醒：如果今天沒有任務，可能是今日未派單，或你的姓名尚未出現在當日分頁。
     </div>
   </div>
 
 </div>
 
 <script>
-  // ===== 只要確認這兩行是你的 =====
+  // ===== 確認這兩行是你的 =====
   const LIFF_ID = "2008915809-vp9PFMVX";
   const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbxY-cAz9uSlEo44YA7GAp6DYtAog3VTxLWWSAesQKiok2w2HxkOVOe_UnhNw5nV9K5C/exec";
 
@@ -216,6 +215,22 @@
     else topRowEl.classList.add("hide");
   }
 
+  // ✅ 忽視數字：顯示 / 比對
+  function normalizeDriverName(name){
+    return String(name || "")
+      .trim()
+      .replace(/\s+/g, "")
+      .replace(/[0-9０-９]/g, "")
+      .toLowerCase();
+  }
+  function prettyDriverName(name){
+    return String(name || "")
+      .trim()
+      .replace(/[0-9０-９]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   // ===== JSONP 共用 =====
   function jsonpCall(params){
     return new Promise((resolve, reject) => {
@@ -273,19 +288,25 @@
     sel.onchange = () => fetchDaily(sel.value);
   }
 
+  function looksUnboundMessage(msg){
+    const m = String(msg || "");
+    return m.includes("尚未綁定") || m.includes("未綁定司機") || m.includes("enabled");
+  }
+
   function renderDaily(driverName, chosenDate, baseToday, daily){
     showBindUI(false);
     showTopRow(true);
 
-    document.getElementById("pillDriver").textContent = `司機：${driverName}`;
+    document.getElementById("pillDriver").textContent = `司機：${prettyDriverName(driverName)}`;
     document.getElementById("pillToday").textContent  = `今天：${baseToday || "-"}｜查看：${chosenDate}`;
     badgeDateEl.textContent = baseToday ? `Today ${baseToday}` : "—";
 
     subtitleEl.textContent = "已載入";
     showMsg("", "");
 
-    // 只取自己的項目
-    const d = (daily.block2?.transferDrivers || []).find(x => x.driver === driverName);
+    // ✅ 用「忽視數字」比對抓自己的群組
+    const target = normalizeDriverName(driverName);
+    const d = (daily.block2?.transferDrivers || []).find(x => normalizeDriverName(x.driver) === target);
     const items = d?.items || [];
 
     contentEl.innerHTML = "";
@@ -328,10 +349,10 @@
       sum.textContent = "展開 / 收合明細";
       det.appendChild(sum);
 
-      // 明細（保持簡潔）
       for (const it of arr){
         const t = document.createElement("div");
         t.className = "task";
+
         const main = `${it.pickup || ""} → ${it.dropoff || ""}　${it.boards ?? ""}版`;
         const meta1 = `等級：${it.grade || ""}　車號：${it.carNo || ""}`;
         const meta2 = it.owner ? `貨主：${it.owner}` : "";
@@ -350,11 +371,6 @@
     }
   }
 
-  function looksUnboundMessage(msg){
-    const m = String(msg || "");
-    return m.includes("尚未綁定") || m.includes("未綁定司機") || m.includes("enabled");
-  }
-
   async function fetchDaily(dateTab){
     if (!currentUserId) {
       showMsg("err", "尚未取得 LINE 身分，請稍後重試");
@@ -371,7 +387,7 @@
       if (!res || res.ok === false) {
         const msg = res?.message || "讀取失敗";
 
-        // 若是未綁定：顯示綁定 UI
+        // 未綁定：顯示綁定 UI
         if (looksUnboundMessage(msg)){
           showTopRow(false);
           showBindUI(true);
@@ -379,7 +395,6 @@
           showMsg("warn", "首次使用請完成綁定：輸入姓名(轉) 後按「一鍵綁定」。");
           contentEl.innerHTML = "";
 
-          // 顯示 uid 給管理員用
           bindUidLineEl.innerHTML = SHOW_USER_ID
             ? `lineUserId：<code>${currentUserId}</code>`
             : `lineUserId：<code>（已隱藏）</code>`;
@@ -388,14 +403,12 @@
           return;
         }
 
-        // 其它錯誤：簡短顯示
         subtitleEl.textContent = "讀取失敗";
         showMsg("err", "目前無法讀取任務，請稍後再試或聯絡管理員。");
         setDebug(SHOW_USER_ID ? `錯誤：<code>${msg}</code><br/>lineUserId：<code>${currentUserId}</code>` : "");
         return;
       }
 
-      // 成功
       fillDateSelect(res.options, res.chosenDate);
       setDebug(SHOW_USER_ID ? `lineUserId：<code>${currentUserId}</code>` : "");
       renderDaily(res.driverName, res.chosenDate, res.options?.baseToday, res.daily);
@@ -412,7 +425,7 @@
   async function doBind(){
     const name = String(bindNameEl.value || "").trim();
     if (!name){
-      showMsg("warn", "請先輸入姓名（需完全等於「姓名(轉)」）");
+      showMsg("warn", "請先輸入姓名（會忽略數字比對）");
       bindNameEl.focus();
       return;
     }
@@ -440,7 +453,6 @@
       subtitleEl.textContent = "綁定成功";
       showMsg("ok", "綁定成功！正在載入你的任務…");
 
-      // 綁定成功後，直接重新載任務（date 留空，走預設 D）
       await fetchDaily("");
 
     } catch(e){
@@ -454,7 +466,6 @@
 
   async function main(){
     try{
-      // 顯示環境徽章
       document.getElementById("badgeEnv").textContent = "LINE";
 
       if (typeof liff === "undefined") {
@@ -476,12 +487,10 @@
       const profile = await liff.getProfile();
       currentUserId = profile.userId;
 
-      // 綁定區塊顯示 uid
       bindUidLineEl.innerHTML = SHOW_USER_ID
         ? `lineUserId：<code>${currentUserId}</code>`
         : `lineUserId：<code>（已隱藏）</code>`;
 
-      // 事件
       document.getElementById("refreshBtn").onclick = () => {
         const sel = document.getElementById("dateSelect");
         const date = sel && sel.value ? sel.value : "";
@@ -493,7 +502,6 @@
         if (ev.key === "Enter") doBind();
       });
 
-      // 首次載入
       await fetchDaily("");
 
     } catch(e){
