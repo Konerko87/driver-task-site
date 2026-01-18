@@ -5,40 +5,98 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>司機任務</title>
   <style>
-    body{margin:0;font-family:system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;background:#0b1220;color:#e5e7eb;}
-    .wrap{max-width:860px;margin:0 auto;padding:14px;}
-    .card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:14px;margin-bottom:12px;}
-    .title{font-size:18px;font-weight:800;margin-bottom:6px;}
-    .muted{color:#a3a3a3;font-size:13px;line-height:1.5;word-break:break-all}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px;}
-    .pill{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);padding:6px 10px;border-radius:999px;font-size:13px;}
-    select{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);color:#e5e7eb;border-radius:10px;padding:8px 10px;font-size:14px;}
-    details{background:rgba(0,0,0,.25);border-radius:12px;padding:10px 12px;margin-top:10px;}
-    summary{cursor:pointer;font-weight:800;}
+    :root{
+      --bg:#0b1220;
+      --card:rgba(255,255,255,.06);
+      --bd:rgba(255,255,255,.10);
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+      --muted2:#a3a3a3;
+      --ok:#86efac;
+      --warn:#fde68a;
+      --err:#fecaca;
+      --btn:rgba(255,255,255,.10);
+      --btnbd:rgba(255,255,255,.14);
+      --chip:rgba(255,255,255,.10);
+      --chipbd:rgba(255,255,255,.12);
+    }
+    body{margin:0;font-family:system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--text);}
+    .wrap{max-width:920px;margin:0 auto;padding:14px;}
+    .card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:14px;margin-bottom:12px;}
+    .top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+    .title{font-size:18px;font-weight:900;letter-spacing:.2px}
+    .sub{color:var(--muted);font-size:13px;line-height:1.5;margin-top:4px}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;}
+    .pill{background:var(--chip);border:1px solid var(--chipbd);padding:7px 10px;border-radius:999px;font-size:13px;}
+    .right{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    select,input{
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.14);
+      color:var(--text);
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:14px;
+      outline:none;
+    }
+    input{min-width:220px}
+    button{
+      background:var(--btn);
+      border:1px solid var(--btnbd);
+      color:var(--text);
+      border-radius:12px;
+      padding:10px 12px;
+      font-size:14px;
+      cursor:pointer;
+      font-weight:800;
+    }
+    button:disabled{opacity:.55;cursor:not-allowed;}
+    .msg{margin-top:10px;font-size:13px;line-height:1.6;color:var(--muted2)}
+    .msg.ok{color:var(--ok)}
+    .msg.warn{color:var(--warn)}
+    .msg.err{color:var(--err)}
+    .divider{height:1px;background:rgba(255,255,255,.08);margin:12px 0}
+    .sectionTitle{font-size:14px;font-weight:900;margin-bottom:6px}
+    details{background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;margin-top:10px;}
+    summary{cursor:pointer;font-weight:900;}
     .task{padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08);}
     .task:last-child{border-bottom:0;}
-    .big{font-size:16px;font-weight:850;}
-    .err{color:#fecaca;}
+    .big{font-size:16px;font-weight:900;}
+    .muted{color:var(--muted);font-size:13px;line-height:1.5;word-break:break-all}
     code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px;}
-    button{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);color:#e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px;cursor:pointer;}
-    button:disabled{opacity:.55;cursor:not-allowed;}
-    .hint{font-size:12px;color:#9ca3af;margin-top:6px;}
-    .empty{color:#cbd5e1;font-size:14px;}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:860px){ .grid{grid-template-columns:1fr 1fr;} }
+    .badge{
+      display:inline-flex;align-items:center;gap:6px;
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.10);
+      padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted);
+    }
+    .hide{display:none !important;}
   </style>
 
-  <!-- LIFF SDK：就算載不到，也會在畫面顯示錯誤 -->
+  <!-- LIFF SDK -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body>
 <div class="wrap">
-  <div class="card">
-    <div class="title">司機任務</div>
-    <div id="status" class="muted">頁面已載入，準備初始化…</div>
-    <div id="debug" class="muted" style="margin-top:8px;"></div>
 
-    <div class="row" id="topRow" style="display:none;">
-      <div class="pill" id="pillDriver"></div>
-      <div class="pill" id="pillToday"></div>
+  <!-- HEADER / STATUS -->
+  <div class="card">
+    <div class="top">
+      <div>
+        <div class="title">司機任務</div>
+        <div class="sub" id="subtitle">載入中…</div>
+      </div>
+      <div class="right">
+        <span class="badge" id="badgeEnv">LINE</span>
+        <span class="badge" id="badgeDate">—</span>
+      </div>
+    </div>
+
+    <!-- 操作列（有任務/已綁定才會顯示） -->
+    <div class="row hide" id="topRow">
+      <div class="pill" id="pillDriver">司機：—</div>
+      <div class="pill" id="pillToday">今天：—</div>
 
       <label class="muted">日期：</label>
       <select id="dateSelect"></select>
@@ -46,18 +104,48 @@
       <button id="refreshBtn" type="button">重新整理</button>
     </div>
 
-    <div class="hint" id="hintLine" style="display:none;">
-      提示：若顯示「尚未綁定司機」，請把畫面顯示的 lineUserId 填到 Google Sheet「司機對照」，並確保 enabled=TRUE、driverName 完全等於「姓名(轉)」。
+    <!-- 只在需要時顯示的訊息（減少噪音） -->
+    <div class="msg hide" id="msgBox"></div>
+
+    <!-- Debug（可關） -->
+    <div class="muted hide" id="debugBox" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- BIND UI（未綁定時顯示） -->
+  <div class="card hide" id="bindCard">
+    <div class="sectionTitle">首次使用：請完成綁定</div>
+    <div class="muted">
+      請輸入你的姓名（必須 <b>完全等於</b> 今日車趟表的「姓名(轉)」）。
+      綁定後你只會看到自己的任務。
+    </div>
+
+    <div class="row" style="margin-top:12px;">
+      <input id="bindName" type="text" placeholder="例如：王小明（需完全一致）" autocomplete="off" />
+      <button id="bindBtn" type="button">一鍵綁定</button>
+      <button id="bindHelpBtn" type="button">我不知道要填什麼</button>
+    </div>
+
+    <div class="msg warn hide" id="bindHelp">
+      你要填的是「每日車趟分頁」裡的 <b>姓名(轉)</b>。如果你不確定，請回報給管理員確認表內名字。
+    </div>
+
+    <div class="divider"></div>
+    <div class="muted">
+      若仍無法綁定，請提供這段給管理員：<br/>
+      <span id="bindUidLine"></span>
     </div>
   </div>
 
+  <!-- CONTENT -->
   <div id="content"></div>
 
+  <!-- FOOTER -->
   <div class="card">
     <div class="muted">
-      若顯示「尚未綁定司機」：把畫面顯示的 <code>lineUserId</code> 填到 Google Sheet「司機對照」（enabled=TRUE）。
+      提醒：如果今天沒有任務，可能是今日未派單，或你的「姓名(轉)」尚未出現在當日分頁。
     </div>
   </div>
+
 </div>
 
 <script>
@@ -65,27 +153,27 @@
   const LIFF_ID = "2008915809-vp9PFMVX";
   const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbxY-cAz9uSlEo44YA7GAp6DYtAog3VTxLWWSAesQKiok2w2HxkOVOe_UnhNw5nV9K5C/exec";
 
+  // 想更「乾淨」就設 false（不顯示 userId）
   const SHOW_USER_ID = true;
 
   let currentUserId = null;
-  let lastOptions = null; // 保存 options（含 baseToday、d、d±）
   let isLoading = false;
 
-  const statusEl = document.getElementById("status");
-  const debugEl  = document.getElementById("debug");
+  const subtitleEl = document.getElementById("subtitle");
+  const msgBoxEl = document.getElementById("msgBox");
+  const debugBoxEl = document.getElementById("debugBox");
 
-  function setStatus(t, isErr=false){
-    statusEl.className = "muted" + (isErr ? " err" : "");
-    statusEl.textContent = t;
-  }
-  function setDebug(html){ debugEl.innerHTML = html || ""; }
+  const topRowEl = document.getElementById("topRow");
+  const contentEl = document.getElementById("content");
 
-  function el(tag, cls, text){
-    const x = document.createElement(tag);
-    if (cls) x.className = cls;
-    if (text !== undefined) x.textContent = text;
-    return x;
-  }
+  const bindCardEl = document.getElementById("bindCard");
+  const bindNameEl = document.getElementById("bindName");
+  const bindBtnEl = document.getElementById("bindBtn");
+  const bindHelpBtnEl = document.getElementById("bindHelpBtn");
+  const bindHelpEl = document.getElementById("bindHelp");
+  const bindUidLineEl = document.getElementById("bindUidLine");
+
+  const badgeDateEl = document.getElementById("badgeDate");
 
   function setLoading(on){
     isLoading = !!on;
@@ -93,10 +181,43 @@
     const sel = document.getElementById("dateSelect");
     if (btn) btn.disabled = isLoading;
     if (sel) sel.disabled = isLoading;
+    bindBtnEl.disabled = isLoading;
   }
 
-  // ===== JSONP（解 CORS）=====
-  function callApiJsonp({ uid, date }) {
+  function showMsg(type, text){
+    if (!text){
+      msgBoxEl.classList.add("hide");
+      msgBoxEl.textContent = "";
+      msgBoxEl.className = "msg hide";
+      return;
+    }
+    msgBoxEl.classList.remove("hide");
+    msgBoxEl.className = "msg " + (type || "");
+    msgBoxEl.textContent = text;
+  }
+
+  function setDebug(html){
+    if (!SHOW_USER_ID){
+      debugBoxEl.classList.add("hide");
+      debugBoxEl.innerHTML = "";
+      return;
+    }
+    debugBoxEl.classList.remove("hide");
+    debugBoxEl.innerHTML = html || "";
+  }
+
+  function showBindUI(on){
+    if (on) bindCardEl.classList.remove("hide");
+    else bindCardEl.classList.add("hide");
+  }
+
+  function showTopRow(on){
+    if (on) topRowEl.classList.remove("hide");
+    else topRowEl.classList.add("hide");
+  }
+
+  // ===== JSONP 共用 =====
+  function jsonpCall(params){
     return new Promise((resolve, reject) => {
       const cbName = "cb_" + Math.random().toString(36).slice(2);
       const script = document.createElement("script");
@@ -108,22 +229,22 @@
         if (script && script.parentNode) script.parentNode.removeChild(script);
       }
 
-      script.onerror = () => { cleanup(); reject(new Error("JSONP 載入失敗（請確認 GAS 有 mode=api_jsonp）")); };
+      script.onerror = () => { cleanup(); reject(new Error("連線失敗，請稍後重試")); };
 
-      const params = new URLSearchParams({
-        mode: "api_jsonp",
-        uid: uid || "",
-        date: date || "",
-        callback: cbName
-      });
-
-      script.src = GAS_EXEC_URL + "?" + params.toString();
+      const usp = new URLSearchParams({ ...params, callback: cbName });
+      script.src = GAS_EXEC_URL + "?" + usp.toString();
       document.head.appendChild(script);
     });
   }
 
+  function callApiDaily(uid, date){
+    return jsonpCall({ mode:"api_jsonp", uid: uid||"", date: date||"" });
+  }
+  function callBind(uid, driverName){
+    return jsonpCall({ mode:"bind_jsonp", uid: uid||"", driverName: driverName||"" });
+  }
+
   function buildFiveDayItems(options){
-    // options: { baseToday, dMinus2, dMinus1, d, dPlus1, dPlus2 }
     const out = [];
     if (options?.dMinus2) out.push({ label: `D-2（${options.dMinus2}）`, value: options.dMinus2 });
     if (options?.dMinus1) out.push({ label: `D-1（${options.dMinus1}）`, value: options.dMinus1 });
@@ -138,8 +259,6 @@
     sel.innerHTML = "";
 
     const items = buildFiveDayItems(options);
-
-    // 若 chosen 不在 items 裡，就預設選 D
     const values = new Set(items.map(x => x.value));
     const finalChosen = values.has(chosen) ? chosen : (options?.d || chosen);
 
@@ -155,25 +274,32 @@
   }
 
   function renderDaily(driverName, chosenDate, baseToday, daily){
-    document.getElementById("topRow").style.display = "flex";
-    document.getElementById("hintLine").style.display = "block";
+    showBindUI(false);
+    showTopRow(true);
 
     document.getElementById("pillDriver").textContent = `司機：${driverName}`;
     document.getElementById("pillToday").textContent  = `今天：${baseToday || "-"}｜查看：${chosenDate}`;
+    badgeDateEl.textContent = baseToday ? `Today ${baseToday}` : "—";
 
+    subtitleEl.textContent = "已載入";
+    showMsg("", "");
+
+    // 只取自己的項目
     const d = (daily.block2?.transferDrivers || []).find(x => x.driver === driverName);
     const items = d?.items || [];
 
-    const root = document.getElementById("content");
-    root.innerHTML = "";
+    contentEl.innerHTML = "";
 
     if (!items.length){
-      const c = el("div","card");
-      c.appendChild(el("div","empty","今天沒有派到任務（或 driverName 對不上「姓名(轉)」）。"));
-      root.appendChild(c);
+      const c = document.createElement("div");
+      c.className = "card";
+      c.innerHTML = `<div class="big">今天沒有任務</div>
+                     <div class="muted" style="margin-top:6px;">可能是今日未派單，或你的姓名尚未出現在當日分頁。</div>`;
+      contentEl.appendChild(c);
       return;
     }
 
+    // 分提貨倉顯示
     const byPickup = new Map();
     for (const it of items){
       const k = it.pickup || "(未填提貨)";
@@ -182,60 +308,145 @@
     }
 
     for (const [pickup, arr] of byPickup.entries()){
-      const card = el("div","card");
-      card.appendChild(el("div","big", pickup));
+      const card = document.createElement("div");
+      card.className = "card";
 
-      const det = el("details");
+      const totalBoards = arr.reduce((s,x)=>s + Number(x.boards||0), 0);
+
+      card.innerHTML = `
+        <div class="top">
+          <div>
+            <div class="big">${pickup}</div>
+            <div class="sub">共 ${arr.length} 筆｜合計 ${totalBoards} 版</div>
+          </div>
+        </div>
+      `;
+
+      const det = document.createElement("details");
       det.open = true;
-      det.appendChild(el("summary", null, `展開 / 收合（${arr.length}筆）`));
+      const sum = document.createElement("summary");
+      sum.textContent = "展開 / 收合明細";
+      det.appendChild(sum);
 
+      // 明細（保持簡潔）
       for (const it of arr){
-        const t = el("div","task");
-        t.appendChild(el("div", null, `${it.pickup || ""} → ${it.dropoff || ""}　${it.boards ?? ""}版`));
-        t.appendChild(el("div","muted", `等級：${it.grade || ""}　貨主：${it.owner || ""}　車號：${it.carNo || ""}`));
-        if (it.note) t.appendChild(el("div","muted", `備註：${it.note}`));
+        const t = document.createElement("div");
+        t.className = "task";
+        const main = `${it.pickup || ""} → ${it.dropoff || ""}　${it.boards ?? ""}版`;
+        const meta1 = `等級：${it.grade || ""}　車號：${it.carNo || ""}`;
+        const meta2 = it.owner ? `貨主：${it.owner}` : "";
+        const meta3 = it.note ? `備註：${it.note}` : "";
+
+        t.innerHTML = `
+          <div style="font-weight:900">${main}</div>
+          <div class="muted">${meta1}${meta2 ? "｜" + meta2 : ""}</div>
+          ${meta3 ? `<div class="muted">${meta3}</div>` : ""}
+        `;
         det.appendChild(t);
       }
 
       card.appendChild(det);
-      root.appendChild(card);
+      contentEl.appendChild(card);
     }
+  }
+
+  function looksUnboundMessage(msg){
+    const m = String(msg || "");
+    return m.includes("尚未綁定") || m.includes("未綁定司機") || m.includes("enabled");
   }
 
   async function fetchDaily(dateTab){
     if (!currentUserId) {
-      setStatus("尚未取得 LINE userId，請稍後再試。", true);
+      showMsg("err", "尚未取得 LINE 身分，請稍後重試");
       return;
     }
 
     setLoading(true);
-    setStatus("讀取任務中…");
+    subtitleEl.textContent = "讀取任務中…";
+    showMsg("", "");
 
     try{
-      const res = await callApiJsonp({ uid: currentUserId, date: dateTab });
+      const res = await callApiDaily(currentUserId, dateTab || "");
 
       if (!res || res.ok === false) {
-        const msg = res?.message || "未知錯誤";
-        setStatus("讀取失敗：" + msg, true);
+        const msg = res?.message || "讀取失敗";
 
-        if (SHOW_USER_ID) setDebug(`lineUserId：<code>${currentUserId || "(尚未取得)"}</code>`);
+        // 若是未綁定：顯示綁定 UI
+        if (looksUnboundMessage(msg)){
+          showTopRow(false);
+          showBindUI(true);
+          subtitleEl.textContent = "尚未綁定";
+          showMsg("warn", "首次使用請完成綁定：輸入姓名(轉) 後按「一鍵綁定」。");
+          contentEl.innerHTML = "";
+
+          // 顯示 uid 給管理員用
+          bindUidLineEl.innerHTML = SHOW_USER_ID
+            ? `lineUserId：<code>${currentUserId}</code>`
+            : `lineUserId：<code>（已隱藏）</code>`;
+
+          setDebug(SHOW_USER_ID ? `lineUserId：<code>${currentUserId}</code>` : "");
+          return;
+        }
+
+        // 其它錯誤：簡短顯示
+        subtitleEl.textContent = "讀取失敗";
+        showMsg("err", "目前無法讀取任務，請稍後再試或聯絡管理員。");
+        setDebug(SHOW_USER_ID ? `錯誤：<code>${msg}</code><br/>lineUserId：<code>${currentUserId}</code>` : "");
         return;
       }
 
-      lastOptions = res.options || null;
-
-      // 填日期選單（五天），預設 D
+      // 成功
       fillDateSelect(res.options, res.chosenDate);
-
-      if (SHOW_USER_ID) setDebug(`lineUserId：<code>${currentUserId}</code>`);
-      else setDebug("");
-
-      setStatus("OK");
+      setDebug(SHOW_USER_ID ? `lineUserId：<code>${currentUserId}</code>` : "");
       renderDaily(res.driverName, res.chosenDate, res.options?.baseToday, res.daily);
 
     } catch(e){
-      setStatus("讀取失敗：" + (e?.message || e), true);
-      if (SHOW_USER_ID) setDebug(`lineUserId：<code>${currentUserId || "(尚未取得)"}</code>`);
+      subtitleEl.textContent = "讀取失敗";
+      showMsg("err", "連線失敗，請稍後再試。");
+      setDebug(SHOW_USER_ID ? `錯誤：<code>${(e?.message || e)}</code><br/>lineUserId：<code>${currentUserId || ""}</code>` : "");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function doBind(){
+    const name = String(bindNameEl.value || "").trim();
+    if (!name){
+      showMsg("warn", "請先輸入姓名（需完全等於「姓名(轉)」）");
+      bindNameEl.focus();
+      return;
+    }
+
+    if (!currentUserId){
+      showMsg("err", "尚未取得 LINE 身分，請返回重開一次");
+      return;
+    }
+
+    setLoading(true);
+    showMsg("", "");
+    subtitleEl.textContent = "綁定中…";
+
+    try{
+      const res = await callBind(currentUserId, name);
+
+      if (!res || res.ok === false){
+        const msg = res?.message || "綁定失敗";
+        subtitleEl.textContent = "綁定失敗";
+        showMsg("err", msg);
+        setDebug(SHOW_USER_ID ? `綁定錯誤：<code>${msg}</code><br/>lineUserId：<code>${currentUserId}</code>` : "");
+        return;
+      }
+
+      subtitleEl.textContent = "綁定成功";
+      showMsg("ok", "綁定成功！正在載入你的任務…");
+
+      // 綁定成功後，直接重新載任務（date 留空，走預設 D）
+      await fetchDaily("");
+
+    } catch(e){
+      subtitleEl.textContent = "綁定失敗";
+      showMsg("err", "綁定連線失敗，請稍後再試。");
+      setDebug(SHOW_USER_ID ? `錯誤：<code>${(e?.message || e)}</code><br/>lineUserId：<code>${currentUserId || ""}</code>` : "");
     } finally {
       setLoading(false);
     }
@@ -243,39 +454,52 @@
 
   async function main(){
     try{
-      setDebug(`網址：<code>${location.href}</code>`);
+      // 顯示環境徽章
+      document.getElementById("badgeEnv").textContent = "LINE";
 
       if (typeof liff === "undefined") {
-        setStatus("LIFF SDK 未載入（請用 LINE 開啟，或檢查網路）", true);
+        subtitleEl.textContent = "無法載入";
+        showMsg("err", "LIFF 無法載入，請檢查網路後重試。");
         return;
       }
 
-      setStatus("LIFF init 中…");
+      subtitleEl.textContent = "初始化中…";
       await liff.init({ liffId: LIFF_ID });
 
       if (!liff.isLoggedIn()){
-        setStatus("需要登入，跳轉中…");
+        subtitleEl.textContent = "需要登入…";
         liff.login({ redirectUri: location.href });
         return;
       }
 
-      setStatus("取得 LINE 身分中…");
+      subtitleEl.textContent = "取得身分中…";
       const profile = await liff.getProfile();
       currentUserId = profile.userId;
 
+      // 綁定區塊顯示 uid
+      bindUidLineEl.innerHTML = SHOW_USER_ID
+        ? `lineUserId：<code>${currentUserId}</code>`
+        : `lineUserId：<code>（已隱藏）</code>`;
+
+      // 事件
       document.getElementById("refreshBtn").onclick = () => {
         const sel = document.getElementById("dateSelect");
         const date = sel && sel.value ? sel.value : "";
         fetchDaily(date);
       };
+      bindBtnEl.onclick = doBind;
+      bindHelpBtnEl.onclick = () => bindHelpEl.classList.toggle("hide");
+      bindNameEl.addEventListener("keydown", (ev)=>{
+        if (ev.key === "Enter") doBind();
+      });
 
-      // 第一次載入：date 留空，讓後端回傳預設 D（真正今天/最近存在）
+      // 首次載入
       await fetchDaily("");
 
     } catch(e){
-      setStatus("初始化失敗：" + (e?.message || e), true);
-      const ua = (navigator.userAgent || "").replace(/</g,"&lt;");
-      setDebug(`錯誤：<code>${(e?.message || e)}</code><br/>UA：<code>${ua}</code>`);
+      subtitleEl.textContent = "初始化失敗";
+      showMsg("err", "初始化失敗，請稍後重試或聯絡管理員。");
+      setDebug(SHOW_USER_ID ? `錯誤：<code>${(e?.message || e)}</code>` : "");
     }
   }
 
@@ -283,5 +507,4 @@
 </script>
 </body>
 </html>
-
 
