@@ -1,3 +1,11 @@
+下面是 **完整可直接貼上覆蓋** 的 `driver.html`（已改成 **五天 D-2~D+2**、顯示 **台灣真正今天 baseToday**、預設選 **D**、JSONP 呼叫不變）。
+
+> 你只要確認這兩行仍是你的：
+>
+> * `LIFF_ID`
+> * `GAS_EXEC_URL`
+
+```html
 <!doctype html>
 <html lang="zh-Hant">
 <head>
@@ -20,7 +28,10 @@
     .big{font-size:16px;font-weight:850;}
     .err{color:#fecaca;}
     code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px;}
-    button{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);color:#e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px}
+    button{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);color:#e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px;cursor:pointer;}
+    button:disabled{opacity:.55;cursor:not-allowed;}
+    .hint{font-size:12px;color:#9ca3af;margin-top:6px;}
+    .empty{color:#cbd5e1;font-size:14px;}
   </style>
 
   <!-- LIFF SDK：就算載不到，也會在畫面顯示錯誤 -->
@@ -42,6 +53,10 @@
 
       <button id="refreshBtn" type="button">重新整理</button>
     </div>
+
+    <div class="hint" id="hintLine" style="display:none;">
+      提示：若顯示「尚未綁定司機」，請把畫面顯示的 lineUserId 填到 Google Sheet「司機對照」，並確保 enabled=TRUE、driverName 完全等於「姓名(轉)」。
+    </div>
   </div>
 
   <div id="content"></div>
@@ -57,9 +72,12 @@
   // ===== 只要確認這兩行是你的 =====
   const LIFF_ID = "2008915809-vp9PFMVX";
   const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbxY-cAz9uSlEo44YA7GAp6DYtAog3VTxLWWSAesQKiok2w2HxkOVOe_UnhNw5nV9K5C/exec";
+
   const SHOW_USER_ID = true;
 
   let currentUserId = null;
+  let lastOptions = null; // 保存 options（含 baseToday、d、d±）
+  let isLoading = false;
 
   const statusEl = document.getElementById("status");
   const debugEl  = document.getElementById("debug");
@@ -75,6 +93,14 @@
     if (cls) x.className = cls;
     if (text !== undefined) x.textContent = text;
     return x;
+  }
+
+  function setLoading(on){
+    isLoading = !!on;
+    const btn = document.getElementById("refreshBtn");
+    const sel = document.getElementById("dateSelect");
+    if (btn) btn.disabled = isLoading;
+    if (sel) sel.disabled = isLoading;
   }
 
   // ===== JSONP（解 CORS）=====
@@ -104,35 +130,44 @@
     });
   }
 
-function fillDateSelect(options, chosen){
-  const sel = document.getElementById("dateSelect");
-  sel.innerHTML = "";
-
-  const items = [];
-  if (options?.dMinus2) items.push({ label: `D-2（${options.dMinus2}）`, value: options.dMinus2 });
-  if (options?.dMinus1) items.push({ label: `D-1（${options.dMinus1}）`, value: options.dMinus1 });
-  if (options?.d)       items.push({ label: `D（${options.d}）`, value: options.d });
-  if (options?.dPlus1)  items.push({ label: `D+1（${options.dPlus1}）`, value: options.dPlus1 });
-  if (options?.dPlus2)  items.push({ label: `D+2（${options.dPlus2}）`, value: options.dPlus2 });
-
-  for (const it of items){
-    const opt = document.createElement("option");
-    opt.value = it.value;
-    opt.textContent = it.label;
-    if (it.value === chosen) opt.selected = true;
-    sel.appendChild(opt);
+  function buildFiveDayItems(options){
+    // options: { baseToday, dMinus2, dMinus1, d, dPlus1, dPlus2 }
+    const out = [];
+    if (options?.dMinus2) out.push({ label: `D-2（${options.dMinus2}）`, value: options.dMinus2 });
+    if (options?.dMinus1) out.push({ label: `D-1（${options.dMinus1}）`, value: options.dMinus1 });
+    if (options?.d)       out.push({ label: `D（${options.d}）`, value: options.d });
+    if (options?.dPlus1)  out.push({ label: `D+1（${options.dPlus1}）`, value: options.dPlus1 });
+    if (options?.dPlus2)  out.push({ label: `D+2（${options.dPlus2}）`, value: options.dPlus2 });
+    return out;
   }
 
-  sel.onchange = () => fetchDaily(sel.value);
-}
+  function fillDateSelect(options, chosen){
+    const sel = document.getElementById("dateSelect");
+    sel.innerHTML = "";
+
+    const items = buildFiveDayItems(options);
+
+    // 若 chosen 不在 items 裡，就預設選 D
+    const values = new Set(items.map(x => x.value));
+    const finalChosen = values.has(chosen) ? chosen : (options?.d || chosen);
+
+    for (const it of items){
+      const opt = document.createElement("option");
+      opt.value = it.value;
+      opt.textContent = it.label;
+      if (it.value === finalChosen) opt.selected = true;
+      sel.appendChild(opt);
+    }
 
     sel.onchange = () => fetchDaily(sel.value);
   }
 
-  function renderDaily(driverName, chosenDate, daily){
+  function renderDaily(driverName, chosenDate, baseToday, daily){
     document.getElementById("topRow").style.display = "flex";
+    document.getElementById("hintLine").style.display = "block";
+
     document.getElementById("pillDriver").textContent = `司機：${driverName}`;
-    document.getElementById("pillToday").textContent  = `今天：${chosenDate}`;
+    document.getElementById("pillToday").textContent  = `今天：${baseToday || "-"}｜查看：${chosenDate}`;
 
     const d = (daily.block2?.transferDrivers || []).find(x => x.driver === driverName);
     const items = d?.items || [];
@@ -142,7 +177,7 @@ function fillDateSelect(options, chosen){
 
     if (!items.length){
       const c = el("div","card");
-      c.appendChild(el("div",null,"今天沒有派到任務（或 driverName 對不上「姓名(轉)」）。"));
+      c.appendChild(el("div","empty","今天沒有派到任務（或 driverName 對不上「姓名(轉)」）。"));
       root.appendChild(c);
       return;
     }
@@ -176,28 +211,41 @@ function fillDateSelect(options, chosen){
   }
 
   async function fetchDaily(dateTab){
+    if (!currentUserId) {
+      setStatus("尚未取得 LINE userId，請稍後再試。", true);
+      return;
+    }
+
+    setLoading(true);
     setStatus("讀取任務中…");
+
     try{
       const res = await callApiJsonp({ uid: currentUserId, date: dateTab });
 
       if (!res || res.ok === false) {
         const msg = res?.message || "未知錯誤";
         setStatus("讀取失敗：" + msg, true);
+
         if (SHOW_USER_ID) setDebug(`lineUserId：<code>${currentUserId || "(尚未取得)"}</code>`);
         return;
       }
 
+      lastOptions = res.options || null;
+
+      // 填日期選單（五天），預設 D
       fillDateSelect(res.options, res.chosenDate);
 
       if (SHOW_USER_ID) setDebug(`lineUserId：<code>${currentUserId}</code>`);
       else setDebug("");
 
       setStatus("OK");
-      renderDaily(res.driverName, res.chosenDate, res.daily);
+      renderDaily(res.driverName, res.chosenDate, res.options?.baseToday, res.daily);
 
     } catch(e){
       setStatus("讀取失敗：" + (e?.message || e), true);
       if (SHOW_USER_ID) setDebug(`lineUserId：<code>${currentUserId || "(尚未取得)"}</code>`);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -223,8 +271,13 @@ function fillDateSelect(options, chosen){
       const profile = await liff.getProfile();
       currentUserId = profile.userId;
 
-      document.getElementById("refreshBtn").onclick = () => fetchDaily(document.getElementById("dateSelect").value || "");
+      document.getElementById("refreshBtn").onclick = () => {
+        const sel = document.getElementById("dateSelect");
+        const date = sel && sel.value ? sel.value : "";
+        fetchDaily(date);
+      };
 
+      // 第一次載入：date 留空，讓後端回傳預設 D（真正今天/最近存在）
       await fetchDaily("");
 
     } catch(e){
