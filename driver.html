@@ -104,22 +104,27 @@
     });
   }
 
-  function fillDateSelect(options, chosen){
-    const sel = document.getElementById("dateSelect");
-    sel.innerHTML = "";
+function fillDateSelect(options, chosen){
+  const sel = document.getElementById("dateSelect");
+  sel.innerHTML = "";
 
-    const items = [];
-    if (options?.dMinus1) items.push({ label: `D-1（${options.dMinus1}）`, value: options.dMinus1 });
-    if (options?.d)       items.push({ label: `D（今天 ${options.d}）`, value: options.d });
-    if (options?.dPlus1)  items.push({ label: `D+1（${options.dPlus1}）`, value: options.dPlus1 });
+  const items = [];
+  if (options?.dMinus2) items.push({ label: `D-2（${options.dMinus2}）`, value: options.dMinus2 });
+  if (options?.dMinus1) items.push({ label: `D-1（${options.dMinus1}）`, value: options.dMinus1 });
+  if (options?.d)       items.push({ label: `D（${options.d}）`, value: options.d });
+  if (options?.dPlus1)  items.push({ label: `D+1（${options.dPlus1}）`, value: options.dPlus1 });
+  if (options?.dPlus2)  items.push({ label: `D+2（${options.dPlus2}）`, value: options.dPlus2 });
 
-    for (const it of items){
-      const opt = document.createElement("option");
-      opt.value = it.value;
-      opt.textContent = it.label;
-      if (it.value === chosen) opt.selected = true;
-      sel.appendChild(opt);
-    }
+  for (const it of items){
+    const opt = document.createElement("option");
+    opt.value = it.value;
+    opt.textContent = it.label;
+    if (it.value === chosen) opt.selected = true;
+    sel.appendChild(opt);
+  }
+
+  sel.onchange = () => fetchDaily(sel.value);
+}
 
     sel.onchange = () => fetchDaily(sel.value);
   }
@@ -233,3 +238,4 @@
 </script>
 </body>
 </html>
+
