@@ -3,39 +3,7 @@
 <head>
   <base target="_top">
   <?!= include('Styles'); ?>
-
-  <!-- ✅ 只加「必要且安全」的補強樣式：不影響你原本的 UI -->
-  <style>
-    .badgeArea{
-      display:inline-flex;align-items:center;gap:6px;
-      padding:4px 10px;border-radius:999px;
-      border:1px solid rgba(198,170,110,.28);
-      background: rgba(198,170,110,.10);
-      color: rgba(234,240,255,.95);
-      font-size:12px;font-weight:900;
-      margin-left:8px;
-      vertical-align:middle;
-    }
-    .seq{
-      display:inline-flex;align-items:center;justify-content:center;
-      min-width:34px;padding:4px 8px;border-radius:999px;
-      border:1px solid rgba(140,196,255,.22);
-      background: rgba(140,196,255,.10);
-      font-weight:900;font-size:12px;
-      white-space:nowrap;
-    }
-    /* 地址/長字串爆版保險 */
-    .route .main, .route .sub, .miniTitle, .palletText{
-      word-break: break-word;
-      overflow-wrap: anywhere;
-    }
-    /* 區配 task：仍用原本 task 格式，只是內容不同 */
-    .task.area{
-      grid-template-columns:56px 1fr 70px; /* 沿用 */
-    }
-  </style>
 </head>
-
 <body>
   <div class="wrap">
     <div class="topbar">
@@ -51,6 +19,7 @@
     </div>
 
     <div class="grid">
+      <!-- TOP -->
       <div class="card">
         <h2>📣 今日公告（轉運 + 區配）</h2>
 
@@ -80,9 +49,9 @@
 
       <!-- Area Drivers -->
       <div class="card">
-        <h2>🟣 區配司機（依順序；預覽顯示「提貨點 → 收件人」，點開看地址）</h2>
+        <h2>🟣 區配司機（依順序，主顯示 E→收件人，點開看地址）</h2>
         <div class="driverGrid" id="areaDrivers"></div>
-        <div class="empty" id="noAreaDrivers" style="display:none;">尚未填區配司機姓名或今日無區配資料</div>
+        <div class="empty" id="noAreaDrivers" style="display:none;">尚未填區配司機姓名或今日無區配司機資料</div>
       </div>
     </div>
   </div>
@@ -101,19 +70,6 @@
     if (g === 'H') return 'h';
     if (g === 'S') return 's';
     return 'n';
-  }
-
-  // ===== name helpers =====
-  // ✅ 忽略姓名尾巴數字（例如「阿明1」顯示成「阿明」）
-  function stripTrailingDigits(name){
-    return safeText(name).trim().replace(/[0-9０-９]+$/g, '');
-  }
-  // ✅ 抓尾巴順序（阿明12 => 12），沒有就 null
-  function trailingSeq(name){
-    const m = safeText(name).trim().match(/([0-9０-９]+)$/);
-    if (!m) return null;
-    const n = Number(m[1].replace(/[０-９]/g, d => String('０１２３４５６７８９'.indexOf(d))));
-    return Number.isFinite(n) ? n : null;
   }
 
   // region helpers
@@ -300,7 +256,7 @@
     container.appendChild(makeKpiAcc('🧩 區配總量（版）', totals.localTotal, '（總量資訊）', []));
   }
 
-  // ===== Transfer Drivers helpers =====
+  // ===== Drivers helpers =====
   function groupDriverItemsByPickup(items){
     const m = new Map();
     (items || []).forEach(t => {
@@ -322,6 +278,7 @@
     }).sort((a,b)=>b.subtotal-a.subtotal);
   }
 
+  // 同一個「提貨→到貨」合併（轉運用）
   function mergeSameRoute(list){
     const map = new Map();
     (list || []).forEach(t => {
@@ -389,7 +346,7 @@
           <div class="driverPreview">${preview || ''}</div>
         </div>
         <div class="chips">
-          <div class="chip">趟數：${num(d.count)}</div>
+          <div class="chip">筆數：${num(d.count)}</div>
           <div class="chip">總版數：${num(d.totalBoards)}</div>
         </div>
       `;
@@ -442,41 +399,39 @@
     });
   }
 
-  // ===== Area Drivers render (NEW) =====
-  // ✅ 預覽只顯示：提貨點(E) → 收件人姓名(K)
-  // ✅ 點開才顯示地址：區配提貨地址(H) / 區配收件人地址(I)
-  function renderAreaDrivers(container, drivers) {
+  // ===== Area drivers =====
+  function seqLabel(seq){
+    const n = Number(seq);
+    return Number.isFinite(n) ? String(n) : "";
+  }
+  function seqSortValue(seq){
+    const n = Number(seq);
+    return Number.isFinite(n) ? n : 999999;
+  }
+
+  function renderAreaDrivers(container, drivers){
     container.innerHTML = '';
     if (!drivers || drivers.length === 0) return;
 
-    // drivers: [{ driver, count, totalBoards, items:[...] }]
     drivers.forEach(d => {
       const det = document.createElement('details');
       det.className = 'driverAcc';
 
-      const dName = stripTrailingDigits(d.driver);
-      const dSeq  = trailingSeq(d.driver);
-
-      // 預覽：抓前三筆（用順序/seq 排）
-      const items = (d.items || []).slice().sort((a,b)=>{
-        const sa = (a.seq != null) ? Number(a.seq) : 999999;
-        const sb = (b.seq != null) ? Number(b.seq) : 999999;
-        if (sa !== sb) return sa - sb;
-        return num(b.boards) - num(a.boards);
+      // preview：只顯示前 2 筆，避免太長
+      const itemsForPreview = (d.items || []).slice(0,2).map(x=>{
+        const s = seqLabel(x.seq);
+        const left = safeText(x.pickup);
+        const right = safeText(x.dropoff);
+        return `${s ? ('#' + s + ' ') : ''}${left} → ${right}`;
       });
-
-      const preview = items.slice(0,3).map(x => {
-        const pick = safeText(x.pickup) || '(未填提貨)';
-        const recv = safeText(x.receiverName) || '(未填收件人)';
-        const s = (x.seq != null) ? `#${x.seq} ` : '';
-        return `${s}${pick} → ${recv}`;
-      }).join(' ｜ ');
+      const more = (d.items && d.items.length > 2) ? `…等共 ${d.items.length} 筆` : '';
+      const preview = (itemsForPreview.join(' ｜ ') + (more ? (' ' + more) : '')).trim();
 
       const sum = document.createElement('summary');
       sum.innerHTML = `
         <div class="driverTop">
-          <div class="driverName">🟣 ${safeText(dName)} ${dSeq ? `<span class="badgeArea">組別/尾碼 ${dSeq}</span>` : `<span class="badgeArea">區配</span>`}</div>
-          <div class="driverPreview">${preview || ''}</div>
+          <div class="driverName">🟣 ${safeText(d.driver)} 區配</div>
+          <div class="driverPreview">${preview}</div>
         </div>
         <div class="chips">
           <div class="chip">筆數：${num(d.count)}</div>
@@ -488,24 +443,30 @@
       const body = document.createElement('div');
       body.className = 'driverBody';
 
-      // 依順序分組：同一提貨倉(E) 放一起（好找）
-      const byPickup = new Map();
-      items.forEach(x=>{
-        const k = safeText(x.pickup) || '(未填提貨)';
-        if (!byPickup.has(k)) byPickup.set(k, []);
-        byPickup.get(k).push(x);
+      // 依 seq 排序：有順序先、無順序後（但不顯示 999999）
+      const items = (d.items || []).slice().sort((a,b)=>{
+        const sa = seqSortValue(a.seq);
+        const sb = seqSortValue(b.seq);
+        if (sa !== sb) return sa - sb;
+        return num(b.boards) - num(a.boards);
       });
 
-      for (const [pickup, list] of byPickup.entries()){
-        // 這組小盒
+      // 依 pickup 分組（視覺更清楚）
+      const byPickup = new Map();
+      items.forEach(x=>{
+        const key = safeText(x.pickup);
+        if (!byPickup.has(key)) byPickup.set(key, []);
+        byPickup.get(key).push(x);
+      });
+
+      Array.from(byPickup.entries()).forEach(([pickup, list])=>{
         const box = document.createElement('div');
         box.className = 'routeGroup';
-
         const subtotal = list.reduce((s,x)=>s+num(x.boards),0);
 
         box.innerHTML = `
           <div class="routeGroupTitle">
-            <div class="t">${safeText(pickup)} <span class="badgeArea">區配</span></div>
+            <div class="t">${safeText(pickup)} 區配</div>
             <div class="n">${num(subtotal)} 版</div>
           </div>
           <div class="routeGroupList"></div>
@@ -514,81 +475,65 @@
         const listEl = box.querySelector('.routeGroupList');
 
         list.forEach(x=>{
-          const tag = (safeText(x.grade).toUpperCase() === 'H') ? 'H' : 'S';
+          const tag = (x.grade || '').toUpperCase() || 'S';
+          const metaParts = [];
+          if (x.carNo) metaParts.push(`車號:${safeText(x.carNo)}`);
+          if (x.owner) metaParts.push(`貨主:${safeText(x.owner)}`);
+          if (x.note) metaParts.push(`備註:${safeText(x.note)}`);
+          const sub = metaParts.join(' ｜ ');
 
-          const recvName = safeText(x.receiverName) || '(未填收件人)';
-          const pickAddr = safeText(x.pickupAddr) || '';
-          const recvAddr = safeText(x.receiverAddr) || '';
+          // 主顯示：E → K（不顯示地址）
+          const mainLine = `${safeText(x.pickup)} → ${safeText(x.dropoff)}`;
 
-          // 主列：不要地址，只要 K（收件人姓名）
-          const main = `${safeText(x.pickup)} → ${recvName}`;
+          const task = document.createElement('details');
+          task.className = 'acc'; // 直接用你既有 details 樣式
 
-          // sub：車號/貨主/備註（跟轉運一致）
-          const meta = [];
-          if (x.carNo) meta.push(`車號:${safeText(x.carNo)}`);
-          if (x.owner) meta.push(`貨主:${safeText(x.owner)}`);
-          if (x.note)  meta.push(`備註:${safeText(x.note)}`);
-          const sub1 = meta.join(' ｜ ');
+          const seq = seqLabel(x.seq);
+          const sum2 = document.createElement('summary');
+          sum2.innerHTML = `
+            <div class="sumLeft">
+              <div class="sumTitle">${seq ? `<span class="chip">順序 ${seq}</span> ` : ''}${mainLine}</div>
+              <div class="sumSub">${sub || '點開看：區配提貨地址 / 收件人地址'}</div>
+            </div>
+            <div class="sumRight">${num(x.boards)} 版</div>
+          `;
+          task.appendChild(sum2);
 
-          // 點開地址（details）
-          const addrDet = document.createElement('details');
-          addrDet.className = 'acc';
-          addrDet.style.marginTop = '6px';
+          const body2 = document.createElement('div');
+          body2.className = 'accBody';
 
-          const seqBadge = (x.seq != null) ? `<span class="seq">#${x.seq}</span>` : `<span class="seq">#-</span>`;
-
-          addrDet.innerHTML = `
-            <summary>
-              <div class="sumLeft">
-                <div class="sumTitle">${seqBadge}　查看地址</div>
-                <div class="sumSub">點開看：區配提貨地址 / 收件人地址</div>
-              </div>
-              <div class="sumRight"></div>
-            </summary>
-            <div class="accBody">
-              <div class="miniRow">
-                <div class="miniLeft">
-                  <div class="miniTitle">📍 區配提貨地址</div>
-                  <div class="miniSub">${pickAddr || '(未填)'}</div>
-                </div>
-              </div>
-              <div class="miniRow">
-                <div class="miniLeft">
-                  <div class="miniTitle">🏁 收件人地址</div>
-                  <div class="miniSub">${recvAddr || '(未填)'}</div>
-                </div>
-              </div>
+          const addr1 = document.createElement('div');
+          addr1.className = 'miniRow';
+          addr1.innerHTML = `
+            <div class="miniLeft">
+              <div class="miniTitle">📍 區配提貨地址</div>
+              <div class="miniSub">${safeText(x.pickupAddr) || '（未填）'}</div>
             </div>
           `;
+          body2.appendChild(addr1);
 
-          const task = document.createElement('div');
-          task.className = 'task area';
-          task.innerHTML = `
-            <div class="tag ${gradeClass(tag)}">${tag}</div>
-            <div class="route">
-              <div class="main">${main}</div>
-              <div class="sub">${sub1 || ''}</div>
+          const addr2 = document.createElement('div');
+          addr2.className = 'miniRow';
+          addr2.innerHTML = `
+            <div class="miniLeft">
+              <div class="miniTitle">🏠 收件人地址</div>
+              <div class="miniSub">${safeText(x.recvAddr) || '（未填）'}</div>
             </div>
-            <div class="boards">${num(x.boards)} 版</div>
           `;
+          body2.appendChild(addr2);
 
-          // 把地址 details 插在 task 後面（但仍在同 group list 裡）
-          const wrap = document.createElement('div');
-          wrap.appendChild(task);
-          wrap.appendChild(addrDet);
-
-          listEl.appendChild(wrap);
+          task.appendChild(body2);
+          listEl.appendChild(task);
         });
 
         body.appendChild(box);
-      }
+      });
 
       det.appendChild(body);
       container.appendChild(det);
     });
   }
 
-  // ===== Load =====
   function loadTabsThenDefault() {
     setLoading(true);
     google.script.run
@@ -623,21 +568,19 @@
         setLoading(false);
         el('subtitle').textContent = `📅 今日車趟：${data.date}`;
 
-        const pivot = (data.block1?.pickupToDropAll || []);
+        const pivot = (data.block1.pickupToDropAll || []);
         el('noAnnounce').style.display = pivot.length ? 'none' : 'block';
         renderAnnounce(el('announce'), pivot);
 
         const ownerByDir = buildOwnerByDir(pivot);
         el('noKpi').style.display = 'none';
-        renderKpis(el('kpiStack'), data.totals || {}, ownerByDir);
+        renderKpis(el('kpiStack'), data.totals, ownerByDir);
 
-        // 轉運
-        const drivers = (data.block2?.transferDrivers || []);
-        el('noTransferDrivers').style.display = drivers.length ? 'none' : 'block';
-        renderTransferDrivers(el('transferDrivers'), drivers);
+        const transfer = (data.block2.transferDrivers || []);
+        el('noTransferDrivers').style.display = transfer.length ? 'none' : 'block';
+        renderTransferDrivers(el('transferDrivers'), transfer);
 
-        // 區配（⚠️ 你 GAS 下一步會回傳 block2.areaDrivers）
-        const area = (data.block2?.areaDrivers || []);
+        const area = (data.block2.areaDrivers || []);
         el('noAreaDrivers').style.display = area.length ? 'none' : 'block';
         renderAreaDrivers(el('areaDrivers'), area);
       })
@@ -655,5 +598,3 @@
 </script>
 </body>
 </html>
-
-
