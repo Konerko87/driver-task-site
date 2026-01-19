@@ -3,7 +3,73 @@
 <head>
   <base target="_top">
   <?!= include('Styles'); ?>
+
+  <!-- ✅ UI 修正：不改 Styles 檔也能救爆版 -->
+  <style>
+    /* ===== FIX: 區配 UI 爆版（字變直排） ===== */
+    .driverAcc summary,
+    .kpiAcc summary,
+    .acc summary{
+      align-items:flex-start;
+    }
+
+    .driverTop{min-width:0;}
+    .driverName{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:560px;
+    }
+    .driverPreview{
+      min-width:0;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width:560px;
+    }
+
+    .routeGroupTitle{gap:10px;}
+    .routeGroupTitle .t{
+      min-width:0;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    /* task grid 中間欄位允許縮小，避免被擠成直排 */
+    .task .route{min-width:0;}
+    .task .route .main{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .task .route .sub{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    /* 區配 task 是 details + summary：summary 內 grid 也要允許縮小 */
+    .areaTaskSummary .route{min-width:0;}
+    .areaTaskSummary .route .main{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .areaTaskSummary .route .sub{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .areaAddr .miniSub{
+      white-space:normal;
+      overflow-wrap:anywhere;
+      word-break:break-word;
+      line-height:1.35;
+    }
+  </style>
 </head>
+
 <body>
   <div class="wrap">
     <div class="topbar">
@@ -76,13 +142,13 @@
     return safeText(name).replace(/[0-9０-９]/g,'').trim();
   }
 
-  function parseSeqFromName(name){
-    // 取尾巴的數字（順序），例如 "5徐廷順1" -> 1，"徐廷順" -> null
-    const s = safeText(name).trim();
-    const m = s.match(/([0-9０-９]+)\s*$/);
-    if (!m) return null;
-    const n = Number(m[1].replace(/[０-９]/g, d => String("０１２３４５６７８９".indexOf(d))));
-    return isFinite(n) ? n : null;
+  // ✅ 忽略 placeholder（例如 #999999）
+  function cleanReceiverLabel(v){
+    const s = safeText(v).trim();
+    if (!s) return '';
+    if (s.startsWith('#')) return '';         // #999999 類型直接當空
+    if (s === '999999') return '';
+    return s;
   }
 
   // region helpers
@@ -411,7 +477,7 @@
     });
   }
 
-  // ===== Area Drivers (new) =====
+  // ===== Area Drivers (fixed UI/UX) =====
   function groupAreaItemsByPickup(items){
     const m = new Map();
     (items || []).forEach(t => {
@@ -421,7 +487,10 @@
     });
 
     return Array.from(m.entries()).map(([pickup, list]) => {
-      const previewTo = uniq(list.map(x => safeText(x.dropLabel || x.dropoff)));
+      const previewTo = uniq(list.map(x => {
+        const lbl = cleanReceiverLabel(x.dropLabel) || cleanReceiverLabel(x.receiver) || cleanReceiverLabel(x.dropoff);
+        return lbl || '(未填收件人)';
+      }));
       const toLine = previewTo.slice(0,3).join(' / ') + (previewTo.length>3 ? ' …' : '');
       return {
         pickup,
@@ -484,40 +553,41 @@
         listSorted.forEach(t => {
           const tag = (safeText(t.grade).toUpperCase() || 'S');
           const metaParts = [];
-          if (t.carNo) metaParts.push(`車號:${safeText(t.carNo)}`);
           if (t.owner) metaParts.push(`貨主:${safeText(t.owner)}`);
-          if (t.note) metaParts.push(`備註:${safeText(t.note)}`);
+          if (t.note)  metaParts.push(`備註:${safeText(t.note)}`);
           const sub = metaParts.join(' ｜ ');
 
-          // ✅ 主行：E → K(收件人)
-          const mainLine = `${safeText(t.pickup)} → ${safeText(t.dropLabel || t.receiver || t.dropoff)}`;
+          // ✅ 主行：E → K（收件人），不顯示地址
+          const recv = cleanReceiverLabel(t.receiver) || cleanReceiverLabel(t.dropLabel) || cleanReceiverLabel(t.dropoff) || '(未填收件人)';
+          const seqTxt = (t.seq !== null && t.seq !== undefined) ? `順序 ${t.seq}：` : '';
+          const mainLine = `${seqTxt}${safeText(t.pickup)} → ${recv}`;
 
           const task = document.createElement('details');
           task.className = 'task';
           task.style.padding = '0';
           task.style.overflow = 'hidden';
 
-          const seq = (t.seq !== null && t.seq !== undefined) ? `順序 ${t.seq}：` : '';
-
           task.innerHTML = `
-            <summary style="padding:8px 10px;display:grid;grid-template-columns:56px 1fr 70px;gap:8px;align-items:center;">
+            <summary class="areaTaskSummary" style="padding:8px 10px;display:grid;grid-template-columns:56px 1fr 70px;gap:8px;align-items:center;">
               <div class="tag ${gradeClass(tag)}">${tag}</div>
               <div class="route">
-                <div class="main">${seq}${mainLine}</div>
+                <div class="main">${mainLine}</div>
                 <div class="sub">${sub || ''}</div>
               </div>
               <div class="boards">${num(t.boards)} 版</div>
             </summary>
-            <div class="accBody" style="padding:10px;border-top:1px solid rgba(255,255,255,.08);">
+
+            <div class="accBody areaAddr" style="padding:10px;border-top:1px solid rgba(255,255,255,.08);">
               <div class="miniRow">
                 <div class="miniLeft">
-                  <div class="miniTitle">📍 區配提貨地址</div>
+                  <div class="miniTitle">📍 區配提貨地址（H）</div>
                   <div class="miniSub">${safeText(t.pickupAddr || '')}</div>
                 </div>
               </div>
+
               <div class="miniRow">
                 <div class="miniLeft">
-                  <div class="miniTitle">🏁 收件人地址</div>
+                  <div class="miniTitle">🏁 收件人地址（I）</div>
                   <div class="miniSub">${safeText(t.recvAddr || '')}</div>
                 </div>
               </div>
@@ -600,3 +670,4 @@
 </script>
 </body>
 </html>
+
