@@ -14,7 +14,6 @@
 
       --line:rgba(255,255,255,.10);
       --line2:rgba(255,255,255,.06);
-      --glass:rgba(18,26,51,.62);
 
       --accent: rgba(198, 170, 110, .95);
       --ice: rgba(140, 196, 255, .95);
@@ -23,9 +22,6 @@
       --shadow2: 0 10px 24px rgba(0,0,0,.32);
 
       --r-card:18px;
-      --r-box:16px;
-      --r-acc:14px;
-      --r-chip:999px;
     }
 
     *{box-sizing:border-box}
@@ -162,7 +158,6 @@
     .tag.h{background:rgba(255,90,90,.22);border-color:rgba(255,90,90,.30)}
     .tag.s{background:rgba(140,196,255,.18);border-color:rgba(140,196,255,.26)}
     .tag.n{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.10)}
-    .route{min-width:0;}
     .route .main{font-weight:900;word-break:break-word;overflow-wrap:anywhere}
     .route .sub{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.3;word-break:break-word;overflow-wrap:anywhere}
     .boards{font-weight:900;text-align:right}
@@ -188,7 +183,6 @@
   <!-- LIFF -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
-
 <body>
   <div class="wrap">
     <div class="topbar">
@@ -272,24 +266,20 @@
     if (g === 'S') return 's';
     return 'n';
   }
+
   function show(id, on){ el(id).style.display = on ? '' : 'none'; }
+
   function setSubtitle(msg){ el('subtitle').textContent = msg; }
+
   function setPill(id, text, cls){
     const p = el(id);
     p.textContent = text;
     p.classList.remove('ok','warn','bad');
     if (cls) p.classList.add(cls);
   }
+
   function normalizeNameInput(s){
     return safeText(s).trim().replace(/\s+/g,'').replace(/[0-9０-９]/g,'');
-  }
-
-  // ✅ 取「尾巴數字」當順序（無則 null）
-  function tailSeq(name){
-    const s = safeText(name).trim().replace(/\s+/g,'');
-    if (!s) return null;
-    const m = s.match(/(\d+)$/);
-    return m ? Number(m[1]) : null;
   }
 
   // JSONP
@@ -312,6 +302,7 @@
       }
 
       window[cbName] = (data) => { cleanup(); resolve(data); };
+
       script.onerror = () => { cleanup(); reject(new Error("JSONP load error")); };
       script.src = full;
       document.body.appendChild(script);
@@ -345,6 +336,16 @@
     if (idxD >= 0) selectEl.selectedIndex = idxD;
   }
 
+  // ✅ 轉運排序（照 B 尾碼 seq）
+  function sortBySeq(items){
+    return (items || []).slice().sort((a,b)=>{
+      const sa = (a.seq === null || a.seq === undefined) ? 999999 : Number(a.seq);
+      const sb = (b.seq === null || b.seq === undefined) ? 999999 : Number(b.seq);
+      if (sa !== sb) return sa - sb;
+      return num(b.boards) - num(a.boards);
+    });
+  }
+
   function renderTasks(me){
     const wrap = el('tasksWrap');
     wrap.innerHTML = '';
@@ -357,36 +358,32 @@
 
     // ---- Transfer section ----
     const tBox = document.createElement('div');
-    tBox.innerHTML = `<div class="muted" style="margin:4px 0 10px">轉運（依尾巴數字排序）</div>`;
+    tBox.innerHTML = `<div class="muted" style="margin:4px 0 10px">轉運（依姓名(轉)尾碼排序）</div>`;
     wrap.appendChild(tBox);
 
-    if (!transfer.length){
+    const transferSorted = sortBySeq(transfer);
+
+    if (!transferSorted.length){
       const e = document.createElement('div');
       e.className = 'empty';
       e.textContent = '今日無轉運任務';
       wrap.appendChild(e);
     } else {
-      // ✅ 轉運：依「尾巴數字」排序（同順序再比 boards）
-      const tSorted = transfer.slice().sort((a,b)=>{
-        const sa = tailSeq(a.driver || '') ?? 999999;
-        const sb = tailSeq(b.driver || '') ?? 999999;
-        if (sa !== sb) return sa - sb;
-        return num(b.boards) - num(a.boards);
-      });
-
-      tSorted.forEach(t => {
+      transferSorted.forEach(t => {
         const tag = (safeText(t.grade).toUpperCase() || 'S');
         const meta = [];
         if (t.carNo) meta.push(`車號:${safeText(t.carNo)}`);
         if (t.owner) meta.push(`貨主:${safeText(t.owner)}`);
         if (t.note)  meta.push(`備註:${safeText(t.note)}`);
 
+        const seqText = (t.seq !== null && t.seq !== undefined) ? `順序 ${t.seq}：` : '';
+
         const div = document.createElement('div');
         div.className = 'task';
         div.innerHTML = `
           <div class="tag ${gradeClass(tag)}">${tag}</div>
           <div class="route">
-            <div class="main">${safeText(t.pickup)} → ${safeText(t.dropoff)}</div>
+            <div class="main">${seqText}${safeText(t.pickup)} → ${safeText(t.dropoff)}</div>
             <div class="sub">${meta.join(' ｜ ')}</div>
           </div>
           <div class="boards">${num(t.boards)} 版</div>
@@ -403,26 +400,21 @@
 
     // ---- Area section ----
     const aBox = document.createElement('div');
-    aBox.innerHTML = `<div class="muted" style="margin:4px 0 10px">區配（依 seq 排序，點開看地址）</div>`;
+    aBox.innerHTML = `<div class="muted" style="margin:4px 0 10px">區配（依姓名(區)尾碼排序，點開看地址）</div>`;
     wrap.appendChild(aBox);
 
-    if (!area.length){
+    const areaSorted = sortBySeq(area);
+
+    if (!areaSorted.length){
       const e = document.createElement('div');
       e.className = 'empty';
       e.textContent = '今日無區配任務';
       wrap.appendChild(e);
     } else {
-      // ✅ 區配：依 seq（尾巴數字）排序
-      const sorted = area.slice().sort((a,b)=>{
-        const sa = (a.seq === null || a.seq === undefined) ? 999999 : Number(a.seq);
-        const sb = (b.seq === null || b.seq === undefined) ? 999999 : Number(b.seq);
-        if (sa !== sb) return sa - sb;
-        return num(b.boards) - num(a.boards);
-      });
-
-      sorted.forEach(t => {
+      areaSorted.forEach(t => {
         const tag = (safeText(t.grade).toUpperCase() || 'S');
         const meta = [];
+        if (t.carNo) meta.push(`車號:${safeText(t.carNo)}`);
         if (t.owner) meta.push(`貨主:${safeText(t.owner)}`);
         if (t.note)  meta.push(`備註:${safeText(t.note)}`);
 
@@ -444,12 +436,12 @@
             <div class="miniRow">
               <div class="miniLeft">
                 <div class="miniTitle">📍 區配提貨地點（F）</div>
-                <div class="miniSub">${safeText(t.pickupAddr || t.pickup || '')}</div>
+                <div class="miniSub">${safeText(t.pickupAddr || '')}</div>
               </div>
             </div>
             <div class="miniRow">
               <div class="miniLeft">
-                <div class="miniTitle">🏁 收件人地址（I）</div>
+                <div class="miniTitle">🏁 收件人地址</div>
                 <div class="miniSub">${safeText(t.recvAddr || '')}</div>
               </div>
             </div>
@@ -496,7 +488,6 @@
 
     if (!payload || payload.ok === false) {
       const msg = safeText(payload && payload.message) || "讀取失敗";
-      // 未綁定 → 打開綁定 UI
       if (msg.includes("尚未綁定") || msg.includes("enabled") || msg.includes("司機對照")) {
         setPill('pillBind', '綁定：未完成', 'warn');
         show('bindCard', true);
@@ -507,7 +498,6 @@
         return;
       }
 
-      // 其他錯誤
       setPill('pillBind', '綁定：未知', 'warn');
       show('bindCard', false);
       show('taskCard', false);
@@ -517,10 +507,8 @@
       return;
     }
 
-    // success
     currentOptions = payload.options || null;
 
-    // 日期下拉：固定 5 天
     if (currentOptions) {
       renderDateSelect(el('dateSelect'), currentOptions);
       if (dateTab) {
@@ -532,16 +520,17 @@
       el('todayLine').textContent = `今天：${safeText(currentOptions.baseToday || '')}`;
     }
 
-    // 綁定狀態
     setPill('pillBind', '綁定：已完成', 'ok');
     show('bindCard', false);
 
-    // 任務
     const me = payload.me || null;
     show('taskCard', true);
 
-    if (me && me.hasTasks) setPill('pillTasks', '任務：有', 'ok');
-    else setPill('pillTasks', '任務：無', 'warn');
+    if (me && me.hasTasks) {
+      setPill('pillTasks', '任務：有', 'ok');
+    } else {
+      setPill('pillTasks', '任務：無', 'warn');
+    }
 
     if (me && me.driverName) {
       el('title').textContent = `🚚 ${me.driverName}｜今日任務`;
@@ -571,7 +560,7 @@
 
     setPill('pillBind', '綁定：已完成', 'ok');
     show('bindCard', false);
-    await loadDaily(""); // 綁定後直接載入預設 D
+    await loadDaily("");
   }
 
   // events
@@ -602,5 +591,6 @@
 </script>
 </body>
 </html>
+
 
 
