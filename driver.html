@@ -4,235 +4,306 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>司機任務</title>
+
   <style>
     :root{
       --bg:#0b1220;
       --card:rgba(255,255,255,.06);
       --bd:rgba(255,255,255,.10);
-      --text:#e5e7eb;
+      --bd2:rgba(255,255,255,.14);
+      --txt:#e5e7eb;
       --muted:#9ca3af;
-      --muted2:#a3a3a3;
-      --ok:#86efac;
-      --warn:#fde68a;
-      --err:#fecaca;
-      --btn:rgba(255,255,255,.10);
-      --btnbd:rgba(255,255,255,.14);
+      --muted2:#6b7280;
+      --good:#34d399;
+      --warn:#fbbf24;
+      --bad:#fca5a5;
       --chip:rgba(255,255,255,.10);
-      --chipbd:rgba(255,255,255,.12);
+      --chipbd:rgba(255,255,255,.14);
+      --btnbg:rgba(255,255,255,.10);
+      --btnbd:rgba(255,255,255,.16);
+      --focus:rgba(255,255,255,.28);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
     }
-    body{margin:0;font-family:system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif;background:var(--bg);color:var(--text);}
-    .wrap{max-width:920px;margin:0 auto;padding:14px;}
-    .card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:14px;margin-bottom:12px;}
-    .top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
-    .title{font-size:18px;font-weight:900;letter-spacing:.2px}
-    .sub{color:var(--muted);font-size:13px;line-height:1.5;margin-top:4px}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;}
-    .pill{background:var(--chip);border:1px solid var(--chipbd);padding:7px 10px;border-radius:999px;font-size:13px;}
-    .right{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    select,input{
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+      background: radial-gradient(900px 600px at 20% 0%, rgba(59,130,246,.18), transparent 60%),
+                  radial-gradient(700px 500px at 80% 10%, rgba(34,197,94,.12), transparent 55%),
+                  var(--bg);
+      color:var(--txt);
+    }
+    .wrap{max-width:980px;margin:0 auto;padding:14px 14px 26px;}
+    .header{
+      display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;
+      padding:14px;border:1px solid var(--bd);background:var(--card);
+      border-radius:16px;box-shadow:var(--shadow);margin-bottom:12px;
+    }
+    .brand{flex:1;min-width:240px}
+    .title{font-size:18px;font-weight:900;letter-spacing:.2px;margin:0 0 4px}
+    .subtitle{font-size:13px;color:var(--muted);line-height:1.45}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      background:var(--chip);border:1px solid var(--chipbd);
+      padding:6px 10px;border-radius:999px;font-size:13px;color:var(--txt);
+      white-space:nowrap;
+    }
+    .dot{width:8px;height:8px;border-radius:99px;background:var(--muted2)}
+    .dot.good{background:var(--good)}
+    .dot.warn{background:var(--warn)}
+    .dot.bad{background:var(--bad)}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
+    label{font-size:12px;color:var(--muted)}
+    select, input{
       background:rgba(255,255,255,.08);
-      border:1px solid rgba(255,255,255,.14);
-      color:var(--text);
+      border:1px solid var(--bd2);
+      color:var(--txt);
       border-radius:12px;
       padding:10px 12px;
       font-size:14px;
       outline:none;
     }
-    input{min-width:220px}
+    select:focus, input:focus{border-color:var(--focus)}
     button{
-      background:var(--btn);
+      background:var(--btnbg);
       border:1px solid var(--btnbd);
-      color:var(--text);
+      color:var(--txt);
       border-radius:12px;
       padding:10px 12px;
       font-size:14px;
+      font-weight:700;
       cursor:pointer;
-      font-weight:800;
     }
-    button:disabled{opacity:.55;cursor:not-allowed;}
-    .msg{margin-top:10px;font-size:13px;line-height:1.6;color:var(--muted2)}
-    .msg.ok{color:var(--ok)}
-    .msg.warn{color:var(--warn)}
-    .msg.err{color:var(--err)}
-    .divider{height:1px;background:rgba(255,255,255,.08);margin:12px 0}
-    .sectionTitle{font-size:14px;font-weight:900;margin-bottom:6px}
-    details{background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;margin-top:10px;}
-    summary{cursor:pointer;font-weight:900;}
-    .task{padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08);}
-    .task:last-child{border-bottom:0;}
-    .big{font-size:16px;font-weight:900;}
-    .muted{color:var(--muted);font-size:13px;line-height:1.5;word-break:break-all}
-    code{background:rgba(255,255,255,.08);padding:2px 6px;border-radius:6px;}
-    .badge{
-      display:inline-flex;align-items:center;gap:6px;
-      background:rgba(255,255,255,.08);
+    button:hover{filter:brightness(1.08)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:12px;
+    }
+    .card{
+      background:var(--card);
+      border:1px solid var(--bd);
+      border-radius:16px;
+      padding:14px;
+      box-shadow:var(--shadow);
+    }
+    .card h2{
+      margin:0 0 10px;
+      font-size:16px;
+      font-weight:900;
+      letter-spacing:.2px;
+      display:flex;align-items:center;gap:8px;
+    }
+    .muted{color:var(--muted);font-size:13px;line-height:1.45}
+    .fine{color:var(--muted2);font-size:12px;line-height:1.45}
+    .empty{
+      padding:14px;border:1px dashed rgba(255,255,255,.18);
+      border-radius:14px;color:var(--muted);background:rgba(0,0,0,.18);
+    }
+
+    details{
+      background:rgba(0,0,0,.22);
       border:1px solid rgba(255,255,255,.10);
-      padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted);
+      border-radius:14px;
+      padding:10px 12px;
+      margin-top:10px;
+      overflow:hidden;
     }
-    .hide{display:none !important;}
+    summary{cursor:pointer;list-style:none;font-weight:900;outline:none}
+    summary::-webkit-details-marker{display:none}
+    .sumline{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .sumtitle{font-size:14px}
+    .sumright{font-size:13px;color:var(--muted)}
+
+    .task{
+      padding:10px 0;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .task:last-child{border-bottom:0}
+    .taskTop{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .taskMain{font-size:14px;font-weight:900}
+    .taskMain .seq{
+      display:inline-block;
+      min-width:30px;
+      padding:3px 8px;
+      border-radius:999px;
+      background:rgba(59,130,246,.18);
+      border:1px solid rgba(59,130,246,.28);
+      font-size:12px;
+      font-weight:900;
+      color:#dbeafe;
+      margin-right:8px;
+      text-align:center;
+    }
+    .taskBoards{
+      font-weight:900;
+      font-size:14px;
+      white-space:nowrap;
+      color:#e8f2ff;
+    }
+    .taskMeta{margin-top:4px;color:var(--muted);font-size:12px;line-height:1.45}
+    code{
+      background:rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.10);
+      padding:2px 6px;border-radius:8px;
+      word-break:break-all;
+    }
+
+    .tabs{
+      display:flex;gap:8px;flex-wrap:wrap;margin-top:8px
+    }
+    .tabBtn{
+      padding:8px 10px;border-radius:999px;font-size:13px;font-weight:900;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.08);
+      cursor:pointer;
+      user-select:none;
+    }
+    .tabBtn.active{
+      background:rgba(34,197,94,.18);
+      border-color:rgba(34,197,94,.30);
+    }
+
+    .bindBox{
+      margin-top:10px;
+      padding:12px;
+      border:1px dashed rgba(255,255,255,.18);
+      border-radius:14px;
+      background:rgba(0,0,0,.18);
+    }
+    .bindRow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+    .hintLine{margin-top:6px}
+    .right{margin-left:auto}
   </style>
 
-  <!-- LIFF SDK -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
+
 <body>
 <div class="wrap">
+  <div class="header">
+    <div class="brand">
+      <div class="title">司機任務</div>
+      <div class="subtitle" id="subtitle">初始化中…</div>
 
-  <!-- HEADER / STATUS -->
-  <div class="card">
-    <div class="top">
-      <div>
-        <div class="title">司機任務</div>
-        <div class="sub" id="subtitle">載入中…</div>
-      </div>
-      <div class="right">
-        <span class="badge" id="badgeEnv">LINE</span>
-        <span class="badge" id="badgeDate">—</span>
+      <div class="tabs" id="viewTabs" style="display:none;">
+        <div class="tabBtn active" data-tab="all">全部</div>
+        <div class="tabBtn" data-tab="transfer">轉運</div>
+        <div class="tabBtn" data-tab="area">區配</div>
       </div>
     </div>
 
-    <!-- 操作列（已綁定才會顯示） -->
-    <div class="row hide" id="topRow">
-      <div class="pill" id="pillDriver">司機：—</div>
-      <div class="pill" id="pillToday">今天：—</div>
+    <div class="controls">
+      <div class="row" id="topRow" style="display:none;">
+        <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">待命</span></div>
+        <div class="pill" id="pillDriver" style="display:none;"></div>
+        <div class="pill" id="pillToday" style="display:none;"></div>
 
-      <label class="muted">日期：</label>
-      <select id="dateSelect"></select>
-
-      <button id="refreshBtn" type="button">重新整理</button>
+        <label class="right">日期</label>
+        <select id="dateSelect"></select>
+        <button id="refreshBtn" type="button">重新整理</button>
+      </div>
     </div>
 
-    <!-- 精簡訊息 -->
-    <div class="msg hide" id="msgBox"></div>
-
-    <!-- Debug（可關） -->
-    <div class="muted hide" id="debugBox" style="margin-top:10px;"></div>
+    <details style="width:100%;" id="debugPanel">
+      <summary>
+        <div class="sumline">
+          <div class="sumtitle">Debug（管理員用）</div>
+          <div class="sumright">點開查看 userId / 錯誤細節</div>
+        </div>
+      </summary>
+      <div class="fine" id="debug"></div>
+    </details>
   </div>
 
-  <!-- BIND UI（未綁定時顯示） -->
-  <div class="card hide" id="bindCard">
-    <div class="sectionTitle">首次使用：請完成綁定</div>
+  <!-- 綁定區塊（未綁定時才顯示） -->
+  <div class="card" id="bindCard" style="display:none;">
+    <h2>🔐 第一次使用：請綁定司機</h2>
     <div class="muted">
-      請輸入你的姓名（會 <b>忽略前後數字</b> 來比對，例如：<code>5王小明1</code> 也能用 <code>王小明</code> 綁定）。
-      綁定後你只會看到自己的任務。
+      系統需要把你的 LINE 身分綁定到司機姓名，之後就會自動顯示你的任務。
     </div>
 
-    <div class="row" style="margin-top:12px;">
-      <input id="bindName" type="text" placeholder="例如：王小明（姓名(轉)）" autocomplete="off" />
-      <button id="bindBtn" type="button">一鍵綁定</button>
-      <button id="bindHelpBtn" type="button">我不知道要填什麼</button>
-    </div>
+    <div class="bindBox">
+      <div class="muted">
+        1) 請輸入你的司機姓名（對照 Excel 的「姓名(轉)」/「姓名(區)」）<br/>
+        2) 名稱後面的數字（例如 <code>5阿明1</code>）系統會自動忽略，不用刻意輸入
+      </div>
 
-    <div class="msg warn hide" id="bindHelp">
-      你要填的是「每日車趟分頁」裡的 <b>姓名(轉)</b>（輸入時會自動忽略數字）。
-      如果你不確定，請回報給管理員確認表內名字。
-    </div>
+      <div class="bindRow">
+        <input id="bindName" placeholder="例如：阿明 / 阿明1 / 5阿明1" style="min-width:240px;flex:1;" />
+        <button id="bindBtn" type="button">立即綁定</button>
+      </div>
 
-    <div class="divider"></div>
-    <div class="muted">
-      若仍無法綁定，請提供這段給管理員：<br/>
-      <span id="bindUidLine"></span>
+      <div class="fine hintLine" id="bindHint"></div>
     </div>
   </div>
 
-  <!-- CONTENT -->
-  <div id="content"></div>
+  <div class="grid" id="content">
+    <div class="card">
+      <h2>📌 提示</h2>
+      <div class="muted">
+        請稍候…正在讀取你的任務。
+      </div>
+    </div>
+  </div>
 
-  <!-- FOOTER -->
   <div class="card">
     <div class="muted">
-      提醒：如果今天沒有任務，可能是今日未派單，或你的姓名尚未出現在當日分頁。
+      若遇到問題，請把 Debug 裡的 <code>lineUserId</code> 提供給管理員。
     </div>
   </div>
-
 </div>
 
 <script>
-  // ===== 確認這兩行是你的 =====
+  // ===== 只要確認這兩行是你的 =====
   const LIFF_ID = "2008915809-vp9PFMVX";
   const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbxY-cAz9uSlEo44YA7GAp6DYtAog3VTxLWWSAesQKiok2w2HxkOVOe_UnhNw5nV9K5C/exec";
 
-  // 想更「乾淨」就設 false（不顯示 userId）
-  const SHOW_USER_ID = true;
-
   let currentUserId = null;
-  let isLoading = false;
+  let currentTabView = "all"; // all | transfer | area
 
-  const subtitleEl = document.getElementById("subtitle");
-  const msgBoxEl = document.getElementById("msgBox");
-  const debugBoxEl = document.getElementById("debugBox");
+  const $ = (id)=>document.getElementById(id);
 
-  const topRowEl = document.getElementById("topRow");
-  const contentEl = document.getElementById("content");
-
-  const bindCardEl = document.getElementById("bindCard");
-  const bindNameEl = document.getElementById("bindName");
-  const bindBtnEl = document.getElementById("bindBtn");
-  const bindHelpBtnEl = document.getElementById("bindHelpBtn");
-  const bindHelpEl = document.getElementById("bindHelp");
-  const bindUidLineEl = document.getElementById("bindUidLine");
-
-  const badgeDateEl = document.getElementById("badgeDate");
-
-  function setLoading(on){
-    isLoading = !!on;
-    const btn = document.getElementById("refreshBtn");
-    const sel = document.getElementById("dateSelect");
-    if (btn) btn.disabled = isLoading;
-    if (sel) sel.disabled = isLoading;
-    bindBtnEl.disabled = isLoading;
+  function setDot(type){
+    const dot = $("statusDot");
+    dot.className = "dot" + (type ? " " + type : "");
+  }
+  function setStatus(text, type){
+    $("statusText").textContent = text || "";
+    setDot(type || "");
+    $("subtitle").textContent = text || "";
   }
 
-  function showMsg(type, text){
-    if (!text){
-      msgBoxEl.classList.add("hide");
-      msgBoxEl.textContent = "";
-      msgBoxEl.className = "msg hide";
-      return;
-    }
-    msgBoxEl.classList.remove("hide");
-    msgBoxEl.className = "msg " + (type || "");
-    msgBoxEl.textContent = text;
-  }
+  function setDebug(html){ $("debug").innerHTML = html || ""; }
 
-  function setDebug(html){
-    if (!SHOW_USER_ID){
-      debugBoxEl.classList.add("hide");
-      debugBoxEl.innerHTML = "";
-      return;
-    }
-    debugBoxEl.classList.remove("hide");
-    debugBoxEl.innerHTML = html || "";
-  }
-
-  function showBindUI(on){
-    if (on) bindCardEl.classList.remove("hide");
-    else bindCardEl.classList.add("hide");
-  }
-
-  function showTopRow(on){
-    if (on) topRowEl.classList.remove("hide");
-    else topRowEl.classList.add("hide");
-  }
-
-  // ✅ 忽視數字：顯示 / 比對
+  // ===== 名稱處理：忽視數字（含全形），用於比對與顯示 =====
   function normalizeDriverName(name){
     return String(name || "")
       .trim()
-      .replace(/\s+/g, "")
-      .replace(/[0-9０-９]/g, "")
+      .replace(/\s+/g,"")
+      .replace(/[0-9０-９]/g,"")
       .toLowerCase();
   }
   function prettyDriverName(name){
     return String(name || "")
       .trim()
-      .replace(/[0-9０-９]/g, "")
-      .replace(/\s+/g, " ")
+      .replace(/[0-9０-９]/g,"")
+      .replace(/\s+/g," ")
       .trim();
   }
 
-  // ===== JSONP 共用 =====
-  function jsonpCall(params){
+  function esc(s){
+    return String(s ?? "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;");
+  }
+
+  // ===== JSONP（解 CORS）=====
+  function jsonp(url){
     return new Promise((resolve, reject) => {
       const cbName = "cb_" + Math.random().toString(36).slice(2);
       const script = document.createElement("script");
@@ -244,270 +315,391 @@
         if (script && script.parentNode) script.parentNode.removeChild(script);
       }
 
-      script.onerror = () => { cleanup(); reject(new Error("連線失敗，請稍後重試")); };
+      script.onerror = () => { cleanup(); reject(new Error("JSONP 載入失敗（GAS /exec 無回應或被阻擋）")); };
 
-      const usp = new URLSearchParams({ ...params, callback: cbName });
-      script.src = GAS_EXEC_URL + "?" + usp.toString();
+      const sep = url.includes("?") ? "&" : "?";
+      script.src = url + sep + "callback=" + encodeURIComponent(cbName);
       document.head.appendChild(script);
     });
   }
 
-  function callApiDaily(uid, date){
-    return jsonpCall({ mode:"api_jsonp", uid: uid||"", date: date||"" });
-  }
-  function callBind(uid, driverName){
-    return jsonpCall({ mode:"bind_jsonp", uid: uid||"", driverName: driverName||"" });
-  }
-
-  function buildFiveDayItems(options){
-    const out = [];
-    if (options?.dMinus2) out.push({ label: `D-2（${options.dMinus2}）`, value: options.dMinus2 });
-    if (options?.dMinus1) out.push({ label: `D-1（${options.dMinus1}）`, value: options.dMinus1 });
-    if (options?.d)       out.push({ label: `D（${options.d}）`, value: options.d });
-    if (options?.dPlus1)  out.push({ label: `D+1（${options.dPlus1}）`, value: options.dPlus1 });
-    if (options?.dPlus2)  out.push({ label: `D+2（${options.dPlus2}）`, value: options.dPlus2 });
-    return out;
+  function callApiJsonp({ uid, date }) {
+    const params = new URLSearchParams({
+      mode: "api_jsonp",
+      uid: uid || "",
+      date: date || ""
+    });
+    return jsonp(GAS_EXEC_URL + "?" + params.toString());
   }
 
+  function callBindJsonp({ uid, driverName }) {
+    const params = new URLSearchParams({
+      mode: "bind_jsonp",
+      uid: uid || "",
+      driverName: driverName || ""
+    });
+    return jsonp(GAS_EXEC_URL + "?" + params.toString());
+  }
+
+  // ===== 日期選單（五天）=====
   function fillDateSelect(options, chosen){
-    const sel = document.getElementById("dateSelect");
+    const sel = $("dateSelect");
     sel.innerHTML = "";
 
-    const items = buildFiveDayItems(options);
-    const values = new Set(items.map(x => x.value));
-    const finalChosen = values.has(chosen) ? chosen : (options?.d || chosen);
+    // 只顯示存在的
+    const items = [];
+    if (options?.dMinus2) items.push({ label: `D-2（${options.dMinus2}）`, value: options.dMinus2 });
+    if (options?.dMinus1) items.push({ label: `D-1（${options.dMinus1}）`, value: options.dMinus1 });
+    if (options?.d)       items.push({ label: `D（${options.d}）`, value: options.d });
+    if (options?.dPlus1)  items.push({ label: `D+1（${options.dPlus1}）`, value: options.dPlus1 });
+    if (options?.dPlus2)  items.push({ label: `D+2（${options.dPlus2}）`, value: options.dPlus2 });
 
     for (const it of items){
       const opt = document.createElement("option");
       opt.value = it.value;
       opt.textContent = it.label;
-      if (it.value === finalChosen) opt.selected = true;
+      if (it.value === chosen) opt.selected = true;
       sel.appendChild(opt);
     }
 
     sel.onchange = () => fetchDaily(sel.value);
   }
 
-  function looksUnboundMessage(msg){
-    const m = String(msg || "");
-    return m.includes("尚未綁定") || m.includes("未綁定司機") || m.includes("enabled");
+  function showTopbar(driverName, chosenDate, baseToday){
+    $("topRow").style.display = "flex";
+
+    const pretty = prettyDriverName(driverName);
+    $("pillDriver").style.display = "inline-flex";
+    $("pillDriver").innerHTML = `👤 司機：<b>${esc(pretty)}</b>`;
+
+    $("pillToday").style.display = "inline-flex";
+    $("pillToday").innerHTML = `📅 今天：<b>${esc(baseToday || chosenDate)}</b>`;
   }
 
-  function renderDaily(driverName, chosenDate, baseToday, daily){
-    showBindUI(false);
-    showTopRow(true);
+  // ===== Tabs（全部/轉運/區配）=====
+  function setupTabs(){
+    const tabs = $("viewTabs");
+    tabs.style.display = "flex";
 
-    document.getElementById("pillDriver").textContent = `司機：${prettyDriverName(driverName)}`;
-    document.getElementById("pillToday").textContent  = `今天：${baseToday || "-"}｜查看：${chosenDate}`;
-    badgeDateEl.textContent = baseToday ? `Today ${baseToday}` : "—";
+    tabs.querySelectorAll(".tabBtn").forEach(btn=>{
+      btn.onclick = ()=>{
+        tabs.querySelectorAll(".tabBtn").forEach(x=>x.classList.remove("active"));
+        btn.classList.add("active");
+        currentTabView = btn.dataset.tab || "all";
+        // 重新渲染：用最後一次的資料
+        if (window.__lastRender) window.__lastRender();
+      };
+    });
+  }
 
-    subtitleEl.textContent = "已載入";
-    showMsg("", "");
-
-    // ✅ 用「忽視數字」比對抓自己的群組
+  // ===== 渲染：轉運 =====
+  function renderTransferSection(driverName, daily){
+    const transferDrivers = daily?.block2?.transferDrivers || [];
     const target = normalizeDriverName(driverName);
-    const d = (daily.block2?.transferDrivers || []).find(x => normalizeDriverName(x.driver) === target);
+
+    // 找到此司機（忽略數字）
+    const d = transferDrivers.find(x => normalizeDriverName(x.driver) === target);
     const items = d?.items || [];
 
-    contentEl.innerHTML = "";
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h2>🚚 轉運任務</h2>`;
 
     if (!items.length){
-      const c = document.createElement("div");
-      c.className = "card";
-      c.innerHTML = `<div class="big">今天沒有任務</div>
-                     <div class="muted" style="margin-top:6px;">可能是今日未派單，或你的姓名尚未出現在當日分頁。</div>`;
-      contentEl.appendChild(c);
-      return;
+      const div = document.createElement("div");
+      div.className = "empty";
+      div.textContent = "今天沒有轉運任務。";
+      card.appendChild(div);
+      return card;
     }
 
-    // 分提貨倉顯示
+    // 依提貨點分組（沿用 pickup/dropoff）
     const byPickup = new Map();
     for (const it of items){
-      const k = it.pickup || "(未填提貨)";
+      const k = (it.pickup || "").trim() || "(未填提貨)";
       if (!byPickup.has(k)) byPickup.set(k, []);
       byPickup.get(k).push(it);
     }
 
     for (const [pickup, arr] of byPickup.entries()){
-      const card = document.createElement("div");
-      card.className = "card";
-
-      const totalBoards = arr.reduce((s,x)=>s + Number(x.boards||0), 0);
-
-      card.innerHTML = `
-        <div class="top">
-          <div>
-            <div class="big">${pickup}</div>
-            <div class="sub">共 ${arr.length} 筆｜合計 ${totalBoards} 版</div>
-          </div>
-        </div>
-      `;
-
       const det = document.createElement("details");
       det.open = true;
-      const sum = document.createElement("summary");
-      sum.textContent = "展開 / 收合明細";
-      det.appendChild(sum);
 
-      for (const it of arr){
-        const t = document.createElement("div");
-        t.className = "task";
+      const totalBoards = arr.reduce((s,x)=>s + Number(x.boards||0), 0);
+      det.innerHTML = `
+        <summary>
+          <div class="sumline">
+            <div class="sumtitle">${esc(pickup)}</div>
+            <div class="sumright">${esc(arr.length)} 筆｜共 ${esc(totalBoards)} 版</div>
+          </div>
+        </summary>
+      `;
 
-        const main = `${it.pickup || ""} → ${it.dropoff || ""}　${it.boards ?? ""}版`;
-        const meta1 = `等級：${it.grade || ""}　車號：${it.carNo || ""}`;
-        const meta2 = it.owner ? `貨主：${it.owner}` : "";
-        const meta3 = it.note ? `備註：${it.note}` : "";
+      arr.forEach(it=>{
+        const task = document.createElement("div");
+        task.className = "task";
 
-        t.innerHTML = `
-          <div style="font-weight:900">${main}</div>
-          <div class="muted">${meta1}${meta2 ? "｜" + meta2 : ""}</div>
-          ${meta3 ? `<div class="muted">${meta3}</div>` : ""}
+        const meta = [];
+        if (it.grade) meta.push(`等級：${esc(it.grade)}`);
+        if (it.owner) meta.push(`貨主：${esc(it.owner)}`);
+        if (it.carNo) meta.push(`車號：${esc(it.carNo)}`);
+        const meta2 = [];
+        if (it.note) meta2.push(`備註：${esc(it.note)}`);
+
+        task.innerHTML = `
+          <div class="taskTop">
+            <div class="taskMain">${esc(it.pickup || "")} → ${esc(it.dropoff || "")}</div>
+            <div class="taskBoards">${esc(it.boards ?? "")} 版</div>
+          </div>
+          <div class="taskMeta">${meta.join(" ｜ ")}</div>
+          ${meta2.length ? `<div class="taskMeta">${meta2.join(" ｜ ")}</div>` : ""}
         `;
-        det.appendChild(t);
-      }
+        det.appendChild(task);
+      });
 
       card.appendChild(det);
-      contentEl.appendChild(card);
     }
+
+    return card;
   }
 
-  async function fetchDaily(dateTab){
-    if (!currentUserId) {
-      showMsg("err", "尚未取得 LINE 身分，請稍後重試");
+  // ===== 渲染：區配 =====
+  function renderAreaSection(driverName, daily){
+    const areaDrivers = daily?.block2?.areaDrivers || [];
+    const target = normalizeDriverName(driverName);
+
+    // areaDrivers.driver 後端已是乾淨名（我在 GAS 用 parseNameWithSeq_ 拿掉尾碼數字）
+    const d = areaDrivers.find(x => normalizeDriverName(x.driver) === target);
+    const items = d?.items || [];
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h2>🟣 區配任務</h2>`;
+
+    if (!items.length){
+      const div = document.createElement("div");
+      div.className = "empty";
+      div.textContent = "今天沒有區配任務。";
+      card.appendChild(div);
+      return card;
+    }
+
+    const det = document.createElement("details");
+    det.open = true;
+
+    const totalBoards = items.reduce((s,x)=>s + Number(x.boards||0), 0);
+    det.innerHTML = `
+      <summary>
+        <div class="sumline">
+          <div class="sumtitle">今日區配清單</div>
+          <div class="sumright">${esc(items.length)} 筆｜共 ${esc(totalBoards)} 版</div>
+        </div>
+      </summary>
+    `;
+
+    items.forEach((it, idx)=>{
+      const task = document.createElement("div");
+      task.className = "task";
+
+      // seq 由後端排序，前端顯示：若沒有 seq 用 idx+1
+      const seq = (it.seq !== null && it.seq !== undefined && isFinite(Number(it.seq)))
+        ? Number(it.seq)
+        : (idx + 1);
+
+      const meta = [];
+      if (it.grade) meta.push(`等級：${esc(it.grade)}`);
+      if (it.owner) meta.push(`貨主：${esc(it.owner)}`);
+      if (it.carNo) meta.push(`車號：${esc(it.carNo)}`);
+      if (it.receiver) meta.push(`收件人：${esc(it.receiver)}`);
+
+      const meta2 = [];
+      if (it.note) meta2.push(`備註：${esc(it.note)}`);
+      if (it.orderNo) meta2.push(`訂單：${esc(it.orderNo)}`);
+
+      task.innerHTML = `
+        <div class="taskTop">
+          <div class="taskMain"><span class="seq">順序 ${esc(seq)}</span>${esc(it.pickup || "")} → ${esc(it.dropoff || "")}</div>
+          <div class="taskBoards">${esc(it.boards ?? "")} 版</div>
+        </div>
+        <div class="taskMeta">${meta.join(" ｜ ")}</div>
+        ${meta2.length ? `<div class="taskMeta">${meta2.join(" ｜ ")}</div>` : ""}
+      `;
+      det.appendChild(task);
+    });
+
+    card.appendChild(det);
+    return card;
+  }
+
+  function renderDailyAll(driverName, chosenDate, baseToday, daily){
+    const root = $("content");
+    root.innerHTML = "";
+
+    const pretty = prettyDriverName(driverName);
+
+    // 顯示：頂部資訊
+    showTopbar(pretty, chosenDate, baseToday);
+
+    const hasTransfer = !!(daily?.block2?.transferDrivers || []).find(x => normalizeDriverName(x.driver) === normalizeDriverName(driverName));
+    const hasArea = !!(daily?.block2?.areaDrivers || []).find(x => normalizeDriverName(x.driver) === normalizeDriverName(driverName));
+
+    // Tabs 開啟
+    setupTabs();
+
+    // 依 tab 顯示
+    const sections = [];
+    if (currentTabView === "all" || currentTabView === "transfer") {
+      sections.push(renderTransferSection(driverName, daily));
+    }
+    if (currentTabView === "all" || currentTabView === "area") {
+      sections.push(renderAreaSection(driverName, daily));
+    }
+
+    // 如果兩個都沒任務，給總提示
+    if (!hasTransfer && !hasArea) {
+      const c = document.createElement("div");
+      c.className = "card";
+      c.innerHTML = `
+        <h2>📭 今日沒有任務</h2>
+        <div class="muted">
+          可能原因：<br/>
+          1) 今天沒有派到任務<br/>
+          2) 司機姓名不一致（系統會忽略數字，但中文字需一致）<br/>
+          3) 管理員尚未在今日分頁填入你的資料
+        </div>
+      `;
+      root.appendChild(c);
       return;
     }
 
-    setLoading(true);
-    subtitleEl.textContent = "讀取任務中…";
-    showMsg("", "");
+    sections.forEach(s => root.appendChild(s));
+  }
 
-    try{
-      const res = await callApiDaily(currentUserId, dateTab || "");
-
-      if (!res || res.ok === false) {
-        const msg = res?.message || "讀取失敗";
-
-        // 未綁定：顯示綁定 UI
-        if (looksUnboundMessage(msg)){
-          showTopRow(false);
-          showBindUI(true);
-          subtitleEl.textContent = "尚未綁定";
-          showMsg("warn", "首次使用請完成綁定：輸入姓名(轉) 後按「一鍵綁定」。");
-          contentEl.innerHTML = "";
-
-          bindUidLineEl.innerHTML = SHOW_USER_ID
-            ? `lineUserId：<code>${currentUserId}</code>`
-            : `lineUserId：<code>（已隱藏）</code>`;
-
-          setDebug(SHOW_USER_ID ? `lineUserId：<code>${currentUserId}</code>` : "");
-          return;
-        }
-
-        subtitleEl.textContent = "讀取失敗";
-        showMsg("err", "目前無法讀取任務，請稍後再試或聯絡管理員。");
-        setDebug(SHOW_USER_ID ? `錯誤：<code>${msg}</code><br/>lineUserId：<code>${currentUserId}</code>` : "");
-        return;
-      }
-
-      fillDateSelect(res.options, res.chosenDate);
-      setDebug(SHOW_USER_ID ? `lineUserId：<code>${currentUserId}</code>` : "");
-      renderDaily(res.driverName, res.chosenDate, res.options?.baseToday, res.daily);
-
-    } catch(e){
-      subtitleEl.textContent = "讀取失敗";
-      showMsg("err", "連線失敗，請稍後再試。");
-      setDebug(SHOW_USER_ID ? `錯誤：<code>${(e?.message || e)}</code><br/>lineUserId：<code>${currentUserId || ""}</code>` : "");
-    } finally {
-      setLoading(false);
-    }
+  // ===== 綁定 UI =====
+  function showBindUI(show, hintHtml){
+    $("bindCard").style.display = show ? "block" : "none";
+    $("bindHint").innerHTML = hintHtml || "";
   }
 
   async function doBind(){
-    const name = String(bindNameEl.value || "").trim();
-    if (!name){
-      showMsg("warn", "請先輸入姓名（會忽略數字比對）");
-      bindNameEl.focus();
+    const name = ($("bindName").value || "").trim();
+    if (!name) {
+      $("bindHint").innerHTML = `<span style="color:var(--warn)">請輸入姓名</span>`;
       return;
     }
 
-    if (!currentUserId){
-      showMsg("err", "尚未取得 LINE 身分，請返回重開一次");
-      return;
-    }
-
-    setLoading(true);
-    showMsg("", "");
-    subtitleEl.textContent = "綁定中…";
+    $("bindBtn").disabled = true;
+    $("bindBtn").textContent = "綁定中…";
+    $("bindHint").innerHTML = `正在綁定，請稍候…`;
 
     try{
-      const res = await callBind(currentUserId, name);
-
-      if (!res || res.ok === false){
+      const res = await callBindJsonp({ uid: currentUserId, driverName: name });
+      if (!res || res.ok === false) {
         const msg = res?.message || "綁定失敗";
-        subtitleEl.textContent = "綁定失敗";
-        showMsg("err", msg);
-        setDebug(SHOW_USER_ID ? `綁定錯誤：<code>${msg}</code><br/>lineUserId：<code>${currentUserId}</code>` : "");
-        return;
+        $("bindHint").innerHTML = `<span style="color:var(--bad)">綁定失敗：</span>${esc(msg)}`;
+      } else {
+        $("bindHint").innerHTML = `<span style="color:var(--good)">✅ 綁定成功</span>，即將載入任務…`;
+        // 綁定完直接重抓任務
+        await fetchDaily($("dateSelect").value || "");
       }
-
-      subtitleEl.textContent = "綁定成功";
-      showMsg("ok", "綁定成功！正在載入你的任務…");
-
-      await fetchDaily("");
-
     } catch(e){
-      subtitleEl.textContent = "綁定失敗";
-      showMsg("err", "綁定連線失敗，請稍後再試。");
-      setDebug(SHOW_USER_ID ? `錯誤：<code>${(e?.message || e)}</code><br/>lineUserId：<code>${currentUserId || ""}</code>` : "");
+      $("bindHint").innerHTML = `<span style="color:var(--bad)">綁定失敗：</span>${esc(e?.message || e)}`;
     } finally {
-      setLoading(false);
+      $("bindBtn").disabled = false;
+      $("bindBtn").textContent = "立即綁定";
     }
   }
 
-  async function main(){
-    try{
-      document.getElementById("badgeEnv").textContent = "LINE";
+  // ===== 讀任務 =====
+  async function fetchDaily(dateTab){
+    setStatus("讀取任務中…", "warn");
 
-      if (typeof liff === "undefined") {
-        subtitleEl.textContent = "無法載入";
-        showMsg("err", "LIFF 無法載入，請檢查網路後重試。");
+    try{
+      const res = await callApiJsonp({ uid: currentUserId, date: dateTab });
+
+      // Debug 永遠顯示 userId
+      setDebug(
+        `lineUserId：<code>${esc(currentUserId || "(未取得)")}</code><br/>` +
+        `網址：<code>${esc(location.href)}</code><br/>` +
+        `GAS：<code>${esc(GAS_EXEC_URL)}</code>`
+      );
+
+      if (!res || res.ok === false) {
+        const msg = res?.message || "目前無法讀取任務";
+        // 若是未綁定，顯示綁定 UI
+        const isNotBound = /尚未綁定|請在畫面內輸入姓名完成綁定|enabled/i.test(msg);
+        if (isNotBound) {
+          setStatus("尚未綁定，請輸入姓名完成綁定", "warn");
+          showBindUI(true, `你的 LINE 身分已取得，可直接綁定。`);
+        } else {
+          setStatus("目前無法讀取任務，請稍後再試或聯絡管理員", "bad");
+          showBindUI(false, "");
+        }
+
+        // 內容區顯示簡潔訊息
+        $("content").innerHTML = `
+          <div class="card">
+            <h2>📌 狀態</h2>
+            <div class="muted">${esc(msg)}</div>
+          </div>
+        `;
         return;
       }
 
-      subtitleEl.textContent = "初始化中…";
+      // OK：隱藏綁定 UI
+      showBindUI(false, "");
+      setStatus("已更新", "good");
+
+      fillDateSelect(res.options, res.chosenDate);
+
+      // 讓重新渲染可用
+      window.__lastRender = () => renderDailyAll(res.driverName, res.chosenDate, res.options?.baseToday, res.daily);
+      window.__lastRender();
+
+    } catch(e){
+      setStatus("目前無法讀取任務，請稍後再試或聯絡管理員", "bad");
+      $("content").innerHTML = `
+        <div class="card">
+          <h2>📌 狀態</h2>
+          <div class="muted">讀取失敗：${esc(e?.message || e)}</div>
+        </div>
+      `;
+    }
+  }
+
+  // ===== main =====
+  async function main(){
+    try{
+      if (typeof liff === "undefined") {
+        setStatus("LIFF SDK 未載入（請用 LINE 開啟或檢查網路）", "bad");
+        setDebug(`錯誤：<code>LIFF SDK undefined</code>`);
+        return;
+      }
+
+      setStatus("LIFF 初始化中…", "warn");
       await liff.init({ liffId: LIFF_ID });
 
       if (!liff.isLoggedIn()){
-        subtitleEl.textContent = "需要登入…";
+        setStatus("需要登入，跳轉中…", "warn");
         liff.login({ redirectUri: location.href });
         return;
       }
 
-      subtitleEl.textContent = "取得身分中…";
+      setStatus("取得 LINE 身分中…", "warn");
       const profile = await liff.getProfile();
       currentUserId = profile.userId;
 
-      bindUidLineEl.innerHTML = SHOW_USER_ID
-        ? `lineUserId：<code>${currentUserId}</code>`
-        : `lineUserId：<code>（已隱藏）</code>`;
+      $("topRow").style.display = "flex";
+      $("refreshBtn").onclick = () => fetchDaily($("dateSelect").value || "");
+      $("bindBtn").onclick = doBind;
 
-      document.getElementById("refreshBtn").onclick = () => {
-        const sel = document.getElementById("dateSelect");
-        const date = sel && sel.value ? sel.value : "";
-        fetchDaily(date);
-      };
-      bindBtnEl.onclick = doBind;
-      bindHelpBtnEl.onclick = () => bindHelpEl.classList.toggle("hide");
-      bindNameEl.addEventListener("keydown", (ev)=>{
-        if (ev.key === "Enter") doBind();
-      });
-
+      // 先抓一次（date 空字串 = 用後端 D）
       await fetchDaily("");
 
     } catch(e){
-      subtitleEl.textContent = "初始化失敗";
-      showMsg("err", "初始化失敗，請稍後重試或聯絡管理員。");
-      setDebug(SHOW_USER_ID ? `錯誤：<code>${(e?.message || e)}</code>` : "");
+      setStatus("初始化失敗，請稍後再試或聯絡管理員", "bad");
+      const ua = (navigator.userAgent || "").replace(/</g,"&lt;");
+      setDebug(`錯誤：<code>${esc(e?.message || e)}</code><br/>UA：<code>${ua}</code>`);
     }
   }
 
@@ -515,4 +707,3 @@
 </script>
 </body>
 </html>
-
