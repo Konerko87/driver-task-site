@@ -347,7 +347,18 @@
     const n = Number(digits);
     return Number.isFinite(n) ? n : null;
   }
+  function displaySeq(seq){
+  // seq 是 null/undefined → 不顯示
+  if (seq === null || seq === undefined) return "";
+  const n = Number(seq);
+  return Number.isFinite(n) ? String(n) : "";
+}
 
+function seqSortValue(seq){
+  // 排序用：沒有順序的一律排最後（但不拿 999999 去顯示）
+  const n = Number(seq);
+  return Number.isFinite(n) ? n : 999999;
+}
   function gradeClass(g){
     if (g === "H") return "h";
     if (g === "S") return "s";
@@ -551,10 +562,10 @@
     const listEl = wrap.querySelector(".routeGroupList");
 
     const items = (d.items || []).slice().sort((a,b)=>{
-      const sa = (a.seq != null) ? Number(a.seq) : 999999;
-      const sb = (b.seq != null) ? Number(b.seq) : 999999;
-      if (sa !== sb) return sa - sb;
-      return num(b.boards) - num(a.boards);
+    const sa = seqSortValue(a.seq);
+    const sb = seqSortValue(b.seq);
+    if (sa !== sb) return sa - sb;
+    return num(b.boards) - num(a.boards);
     });
 
     items.forEach(x=>{
@@ -584,7 +595,11 @@
       addrDet.innerHTML = `
         <summary>
           <div class="driverHeader">
-            <div class="driverName"><span class="seq">#${x.seq != null ? x.seq : "-"}</span>　查看地址</div>
+            <div class="driverName">
+            ${displaySeq(x.seq) ? `<span class="seq">#${displaySeq(x.seq)}</span>` : ``}
+            查看地址
+          </div>
+
             <div class="driverMeta">點開看：區配提貨地址 / 收件人地址</div>
           </div>
           <div></div>
@@ -748,3 +763,4 @@
 </script>
 </body>
 </html>
+
