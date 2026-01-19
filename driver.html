@@ -336,40 +336,177 @@
     if (idxD >= 0) selectEl.selectedIndex = idxD;
   }
 
-  // ✅ 轉運排序（照 B 尾碼 seq）
-  function sortBySeq(items){
-    return (items || []).slice().sort((a,b)=>{
+  // ============================
+  // ✅ 合併 + 排序核心
+  // ============================
+
+  // 轉運：同路線 pickup→dropoff 合併；seq 取最小；grade H 優先；owner/note/carNo 合併
+  function mergeTransferByRoute(items){
+    const map = new Map();
+
+    (items || []).forEach(t=>{
+      const pickup = safeText(t.pickup).trim();
+      const dropoff = safeText(t.dropoff).trim();
+      if (!pickup && !dropoff) return;
+
+      const key = pickup + '→' + dropoff;
+
+      if (!map.has(key)){
+        map.set(key, {
+          pickup, dropoff,
+          boards: 0,
+          grade: 'S',
+          seqMin: null,
+          owners: new Set(),
+          carNos: new Set(),
+          notes: new Set()
+        });
+      }
+
+      const g = map.get(key);
+      g.boards += num(t.boards);
+
+      const tg = safeText(t.grade).toUpperCase() || 'S';
+      if (tg === 'H') g.grade = 'H';
+
+      const seq = (t.seq === null || t.seq === undefined) ? null : Number(t.seq);
+      if (Number.isFinite(seq)){
+        g.seqMin = (g.seqMin === null || g.seqMin === undefined) ? seq : Math.min(g.seqMin, seq);
+      }
+
+      const owner = safeText(t.owner).trim();
+      if (owner) g.owners.add(owner);
+
+      const carNo = safeText(t.carNo).trim();
+      if (carNo) g.carNos.add(carNo);
+
+      const note = safeText(t.note).trim();
+      if (note) g.notes.add(note);
+    });
+
+    const out = Array.from(map.values()).map(g=>({
+      pickup: g.pickup,
+      dropoff: g.dropoff,
+      boards: g.boards,
+      grade: g.grade,
+      seq: (g.seqMin === null || g.seqMin === undefined) ? null : Number(g.seqMin),
+      owner: Array.from(g.owners).join(' / '),
+      carNo: Array.from(g.carNos).join(' / '),
+      note: Array.from(g.notes).join(' / ')
+    }));
+
+    // ✅ 順序：seq 升冪（無 seq 最後）→ boards 由大到小
+    out.sort((a,b)=>{
       const sa = (a.seq === null || a.seq === undefined) ? 999999 : Number(a.seq);
       const sb = (b.seq === null || b.seq === undefined) ? 999999 : Number(b.seq);
       if (sa !== sb) return sa - sb;
       return num(b.boards) - num(a.boards);
     });
+
+    return out;
   }
+
+  // 區配：同 pickupAddr + receiver(或 dropLabel) 合併（避免同一地址拆兩筆）；seq 取最小；grade H 優先
+  function mergeAreaTasks(items){
+    const map = new Map();
+
+    (items || []).forEach(t=>{
+      const pickupAddr = safeText(t.pickupAddr).trim();
+      const recv = safeText(t.dropLabel || t.receiver || t.dropoff).trim();
+      if (!pickupAddr && !recv) return;
+
+      const key = pickupAddr + '→' + recv;
+
+      if (!map.has(key)){
+        map.set(key, {
+          pickupAddr,
+          recv,
+          boards: 0,
+          grade: 'S',
+          seqMin: null,
+          owners: new Set(),
+          carNos: new Set(),
+          notes: new Set(),
+          recvAddr: ''
+        });
+      }
+
+      const g = map.get(key);
+      g.boards += num(t.boards);
+
+      const tg = safeText(t.grade).toUpperCase() || 'S';
+      if (tg === 'H') g.grade = 'H';
+
+      const seq = (t.seq === null || t.seq === undefined) ? null : Number(t.seq);
+      if (Number.isFinite(seq)){
+        g.seqMin = (g.seqMin === null || g.seqMin === undefined) ? seq : Math.min(g.seqMin, seq);
+      }
+
+      const owner = safeText(t.owner).trim();
+      if (owner) g.owners.add(owner);
+
+      const carNo = safeText(t.carNo).trim();
+      if (carNo) g.carNos.add(carNo);
+
+      const note = safeText(t.note).trim();
+      if (note) g.notes.add(note);
+
+      // 地址：有就留（同 key 以第一個非空為準）
+      const ra = safeText(t.recvAddr).trim();
+      if (!g.recvAddr && ra) g.recvAddr = ra;
+    });
+
+    const out = Array.from(map.values()).map(g=>({
+      pickupAddr: g.pickupAddr,
+      recv: g.recv,
+      boards: g.boards,
+      grade: g.grade,
+      seq: (g.seqMin === null || g.seqMin === undefined) ? null : Number(g.seqMin),
+      owner: Array.from(g.owners).join(' / '),
+      carNo: Array.from(g.carNos).join(' / '),
+      note: Array.from(g.notes).join(' / '),
+      recvAddr: g.recvAddr
+    }));
+
+    out.sort((a,b)=>{
+      const sa = (a.seq === null || a.seq === undefined) ? 999999 : Number(a.seq);
+      const sb = (b.seq === null || b.seq === undefined) ? 999999 : Number(b.seq);
+      if (sa !== sb) return sa - sb;
+      return num(b.boards) - num(a.boards);
+    });
+
+    return out;
+  }
+
+  // ============================
+  // render
+  // ============================
 
   function renderTasks(me){
     const wrap = el('tasksWrap');
     wrap.innerHTML = '';
 
-    const transfer = (me && me.transfer && me.transfer.items) ? me.transfer.items : [];
-    const area = (me && me.area && me.area.items) ? me.area.items : [];
+    const transferRaw = (me && me.transfer && me.transfer.items) ? me.transfer.items : [];
+    const areaRaw = (me && me.area && me.area.items) ? me.area.items : [];
+
+    const transfer = mergeTransferByRoute(transferRaw);
+    const area = mergeAreaTasks(areaRaw);
 
     const total = transfer.length + area.length;
     show('noTasks', total === 0);
 
     // ---- Transfer section ----
     const tBox = document.createElement('div');
-    tBox.innerHTML = `<div class="muted" style="margin:4px 0 10px">轉運（依姓名(轉)尾碼排序）</div>`;
+    tBox.innerHTML = `<div class="muted" style="margin:4px 0 10px">轉運（同路線合併 + 依姓名(轉)尾碼順序）</div>`;
     wrap.appendChild(tBox);
 
-    const transferSorted = sortBySeq(transfer);
-
-    if (!transferSorted.length){
+    if (!transfer.length){
       const e = document.createElement('div');
       e.className = 'empty';
       e.textContent = '今日無轉運任務';
       wrap.appendChild(e);
     } else {
-      transferSorted.forEach(t => {
+      transfer.forEach(t => {
         const tag = (safeText(t.grade).toUpperCase() || 'S');
         const meta = [];
         if (t.carNo) meta.push(`車號:${safeText(t.carNo)}`);
@@ -400,18 +537,16 @@
 
     // ---- Area section ----
     const aBox = document.createElement('div');
-    aBox.innerHTML = `<div class="muted" style="margin:4px 0 10px">區配（依姓名(區)尾碼排序，點開看地址）</div>`;
+    aBox.innerHTML = `<div class="muted" style="margin:4px 0 10px">區配（同地址合併 + 依姓名(區)尾碼順序，點開看地址）</div>`;
     wrap.appendChild(aBox);
 
-    const areaSorted = sortBySeq(area);
-
-    if (!areaSorted.length){
+    if (!area.length){
       const e = document.createElement('div');
       e.className = 'empty';
       e.textContent = '今日無區配任務';
       wrap.appendChild(e);
     } else {
-      areaSorted.forEach(t => {
+      area.forEach(t => {
         const tag = (safeText(t.grade).toUpperCase() || 'S');
         const meta = [];
         if (t.carNo) meta.push(`車號:${safeText(t.carNo)}`);
@@ -419,7 +554,7 @@
         if (t.note)  meta.push(`備註:${safeText(t.note)}`);
 
         const seqText = (t.seq !== null && t.seq !== undefined) ? `順序 ${t.seq}：` : '';
-        const main = `${safeText(t.pickup)} → ${safeText(t.dropLabel || t.receiver || t.dropoff)}`;
+        const main = `${safeText(t.pickupAddr)} → ${safeText(t.recv)}`;
 
         const det = document.createElement('details');
         det.style.marginTop = '8px';
@@ -591,6 +726,3 @@
 </script>
 </body>
 </html>
-
-
-
