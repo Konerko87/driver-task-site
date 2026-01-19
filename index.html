@@ -19,7 +19,6 @@
     </div>
 
     <div class="grid">
-      <!-- TOP -->
       <div class="card">
         <h2>📣 今日公告（轉運 + 區配）</h2>
 
@@ -49,9 +48,9 @@
 
       <!-- Area Drivers -->
       <div class="card">
-        <h2>🟣 區配司機（依順序，主顯示 E→收件人，點開看地址）</h2>
+        <h2>🟣 區配司機（收合看提貨>收件人，點開看地址 H/I）</h2>
         <div class="driverGrid" id="areaDrivers"></div>
-        <div class="empty" id="noAreaDrivers" style="display:none;">尚未填區配司機姓名或今日無區配司機資料</div>
+        <div class="empty" id="noAreaDrivers" style="display:none;">今日無區配司機資料</div>
       </div>
     </div>
   </div>
@@ -70,6 +69,20 @@
     if (g === 'H') return 'h';
     if (g === 'S') return 's';
     return 'n';
+  }
+
+  // ====== name helpers (ignore digits) ======
+  function displayNameNoDigits(name){
+    return safeText(name).replace(/[0-9０-９]/g,'').trim();
+  }
+
+  function parseSeqFromName(name){
+    // 取尾巴的數字（順序），例如 "5徐廷順1" -> 1，"徐廷順" -> null
+    const s = safeText(name).trim();
+    const m = s.match(/([0-9０-９]+)\s*$/);
+    if (!m) return null;
+    const n = Number(m[1].replace(/[０-９]/g, d => String("０１２３４５６７８９".indexOf(d))));
+    return isFinite(n) ? n : null;
   }
 
   // region helpers
@@ -102,7 +115,7 @@
       .join(' / ');
   }
 
-  // ===== RIGHT =====
+  // ===== RIGHT (announce) =====
   function renderAnnounce(container, pivotArr) {
     container.innerHTML = '';
     if (!pivotArr || pivotArr.length === 0) return;
@@ -256,7 +269,7 @@
     container.appendChild(makeKpiAcc('🧩 區配總量（版）', totals.localTotal, '（總量資訊）', []));
   }
 
-  // ===== Drivers helpers =====
+  // ===== Transfer Drivers (existing) =====
   function groupDriverItemsByPickup(items){
     const m = new Map();
     (items || []).forEach(t => {
@@ -278,7 +291,6 @@
     }).sort((a,b)=>b.subtotal-a.subtotal);
   }
 
-  // 同一個「提貨→到貨」合併（轉運用）
   function mergeSameRoute(list){
     const map = new Map();
     (list || []).forEach(t => {
@@ -342,7 +354,7 @@
       const sum = document.createElement('summary');
       sum.innerHTML = `
         <div class="driverTop">
-          <div class="driverName">🚚 ${safeText(d.driver)}</div>
+          <div class="driverName">🚚 ${displayNameNoDigits(d.driver)}</div>
           <div class="driverPreview">${preview || ''}</div>
         </div>
         <div class="chips">
@@ -399,17 +411,28 @@
     });
   }
 
-  // ===== Area drivers =====
-  function seqLabel(seq){
-    const n = Number(seq);
-    return Number.isFinite(n) ? String(n) : "";
-  }
-  function seqSortValue(seq){
-    const n = Number(seq);
-    return Number.isFinite(n) ? n : 999999;
+  // ===== Area Drivers (new) =====
+  function groupAreaItemsByPickup(items){
+    const m = new Map();
+    (items || []).forEach(t => {
+      const k = safeText(t.pickup);
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(t);
+    });
+
+    return Array.from(m.entries()).map(([pickup, list]) => {
+      const previewTo = uniq(list.map(x => safeText(x.dropLabel || x.dropoff)));
+      const toLine = previewTo.slice(0,3).join(' / ') + (previewTo.length>3 ? ' …' : '');
+      return {
+        pickup,
+        toLine: toLine || '',
+        subtotal: list.reduce((s,x)=>s+num(x.boards),0),
+        list
+      };
+    }).sort((a,b)=>b.subtotal-a.subtotal);
   }
 
-  function renderAreaDrivers(container, drivers){
+  function renderAreaDrivers(container, drivers) {
     container.innerHTML = '';
     if (!drivers || drivers.length === 0) return;
 
@@ -417,21 +440,14 @@
       const det = document.createElement('details');
       det.className = 'driverAcc';
 
-      // preview：只顯示前 2 筆，避免太長
-      const itemsForPreview = (d.items || []).slice(0,2).map(x=>{
-        const s = seqLabel(x.seq);
-        const left = safeText(x.pickup);
-        const right = safeText(x.dropoff);
-        return `${s ? ('#' + s + ' ') : ''}${left} → ${right}`;
-      });
-      const more = (d.items && d.items.length > 2) ? `…等共 ${d.items.length} 筆` : '';
-      const preview = (itemsForPreview.join(' ｜ ') + (more ? (' ' + more) : '')).trim();
+      const groups = groupAreaItemsByPickup(d.items || []);
+      const preview = groups.slice(0,3).map(g => `${g.pickup} > ${g.toLine}`).join(' ｜ ');
 
       const sum = document.createElement('summary');
       sum.innerHTML = `
         <div class="driverTop">
-          <div class="driverName">🟣 ${safeText(d.driver)} 區配</div>
-          <div class="driverPreview">${preview}</div>
+          <div class="driverName">🟣 ${displayNameNoDigits(d.driver)} 區配</div>
+          <div class="driverPreview">${preview || ''}</div>
         </div>
         <div class="chips">
           <div class="chip">筆數：${num(d.count)}</div>
@@ -443,86 +459,70 @@
       const body = document.createElement('div');
       body.className = 'driverBody';
 
-      // 依 seq 排序：有順序先、無順序後（但不顯示 999999）
-      const items = (d.items || []).slice().sort((a,b)=>{
-        const sa = seqSortValue(a.seq);
-        const sb = seqSortValue(b.seq);
-        if (sa !== sb) return sa - sb;
-        return num(b.boards) - num(a.boards);
-      });
-
-      // 依 pickup 分組（視覺更清楚）
-      const byPickup = new Map();
-      items.forEach(x=>{
-        const key = safeText(x.pickup);
-        if (!byPickup.has(key)) byPickup.set(key, []);
-        byPickup.get(key).push(x);
-      });
-
-      Array.from(byPickup.entries()).forEach(([pickup, list])=>{
+      groups.forEach(g => {
         const box = document.createElement('div');
         box.className = 'routeGroup';
-        const subtotal = list.reduce((s,x)=>s+num(x.boards),0);
 
         box.innerHTML = `
           <div class="routeGroupTitle">
-            <div class="t">${safeText(pickup)} 區配</div>
-            <div class="n">${num(subtotal)} 版</div>
+            <div class="t">${safeText(g.pickup)}  &nbsp;>&nbsp;  ${safeText(g.toLine)}</div>
+            <div class="n">${num(g.subtotal)} 版</div>
           </div>
           <div class="routeGroupList"></div>
         `;
 
         const listEl = box.querySelector('.routeGroupList');
 
-        list.forEach(x=>{
-          const tag = (x.grade || '').toUpperCase() || 'S';
+        // 區配：依 seq 排序（沒有 seq 放最後）
+        const listSorted = (g.list || []).slice().sort((a,b)=>{
+          const sa = (a.seq === null || a.seq === undefined) ? 999999 : Number(a.seq);
+          const sb = (b.seq === null || b.seq === undefined) ? 999999 : Number(b.seq);
+          if (sa !== sb) return sa - sb;
+          return num(b.boards) - num(a.boards);
+        });
+
+        listSorted.forEach(t => {
+          const tag = (safeText(t.grade).toUpperCase() || 'S');
           const metaParts = [];
-          if (x.carNo) metaParts.push(`車號:${safeText(x.carNo)}`);
-          if (x.owner) metaParts.push(`貨主:${safeText(x.owner)}`);
-          if (x.note) metaParts.push(`備註:${safeText(x.note)}`);
+          if (t.carNo) metaParts.push(`車號:${safeText(t.carNo)}`);
+          if (t.owner) metaParts.push(`貨主:${safeText(t.owner)}`);
+          if (t.note) metaParts.push(`備註:${safeText(t.note)}`);
           const sub = metaParts.join(' ｜ ');
 
-          // 主顯示：E → K（不顯示地址）
-          const mainLine = `${safeText(x.pickup)} → ${safeText(x.dropoff)}`;
+          // ✅ 主行：E → K(收件人)
+          const mainLine = `${safeText(t.pickup)} → ${safeText(t.dropLabel || t.receiver || t.dropoff)}`;
 
           const task = document.createElement('details');
-          task.className = 'acc'; // 直接用你既有 details 樣式
+          task.className = 'task';
+          task.style.padding = '0';
+          task.style.overflow = 'hidden';
 
-          const seq = seqLabel(x.seq);
-          const sum2 = document.createElement('summary');
-          sum2.innerHTML = `
-            <div class="sumLeft">
-              <div class="sumTitle">${seq ? `<span class="chip">順序 ${seq}</span> ` : ''}${mainLine}</div>
-              <div class="sumSub">${sub || '點開看：區配提貨地址 / 收件人地址'}</div>
-            </div>
-            <div class="sumRight">${num(x.boards)} 版</div>
-          `;
-          task.appendChild(sum2);
+          const seq = (t.seq !== null && t.seq !== undefined) ? `順序 ${t.seq}：` : '';
 
-          const body2 = document.createElement('div');
-          body2.className = 'accBody';
-
-          const addr1 = document.createElement('div');
-          addr1.className = 'miniRow';
-          addr1.innerHTML = `
-            <div class="miniLeft">
-              <div class="miniTitle">📍 區配提貨地址</div>
-              <div class="miniSub">${safeText(x.pickupAddr) || '（未填）'}</div>
-            </div>
-          `;
-          body2.appendChild(addr1);
-
-          const addr2 = document.createElement('div');
-          addr2.className = 'miniRow';
-          addr2.innerHTML = `
-            <div class="miniLeft">
-              <div class="miniTitle">🏠 收件人地址</div>
-              <div class="miniSub">${safeText(x.recvAddr) || '（未填）'}</div>
+          task.innerHTML = `
+            <summary style="padding:8px 10px;display:grid;grid-template-columns:56px 1fr 70px;gap:8px;align-items:center;">
+              <div class="tag ${gradeClass(tag)}">${tag}</div>
+              <div class="route">
+                <div class="main">${seq}${mainLine}</div>
+                <div class="sub">${sub || ''}</div>
+              </div>
+              <div class="boards">${num(t.boards)} 版</div>
+            </summary>
+            <div class="accBody" style="padding:10px;border-top:1px solid rgba(255,255,255,.08);">
+              <div class="miniRow">
+                <div class="miniLeft">
+                  <div class="miniTitle">📍 區配提貨地址</div>
+                  <div class="miniSub">${safeText(t.pickupAddr || '')}</div>
+                </div>
+              </div>
+              <div class="miniRow">
+                <div class="miniLeft">
+                  <div class="miniTitle">🏁 收件人地址</div>
+                  <div class="miniSub">${safeText(t.recvAddr || '')}</div>
+                </div>
+              </div>
             </div>
           `;
-          body2.appendChild(addr2);
-
-          task.appendChild(body2);
           listEl.appendChild(task);
         });
 
@@ -576,13 +576,15 @@
         el('noKpi').style.display = 'none';
         renderKpis(el('kpiStack'), data.totals, ownerByDir);
 
-        const transfer = (data.block2.transferDrivers || []);
-        el('noTransferDrivers').style.display = transfer.length ? 'none' : 'block';
-        renderTransferDrivers(el('transferDrivers'), transfer);
+        // Transfer
+        const tDrivers = (data.block2.transferDrivers || []);
+        el('noTransferDrivers').style.display = tDrivers.length ? 'none' : 'block';
+        renderTransferDrivers(el('transferDrivers'), tDrivers);
 
-        const area = (data.block2.areaDrivers || []);
-        el('noAreaDrivers').style.display = area.length ? 'none' : 'block';
-        renderAreaDrivers(el('areaDrivers'), area);
+        // Area
+        const aDrivers = (data.block2.areaDrivers || []);
+        el('noAreaDrivers').style.display = aDrivers.length ? 'none' : 'block';
+        renderAreaDrivers(el('areaDrivers'), aDrivers);
       })
       .withFailureHandler((err) => {
         setLoading(false);
