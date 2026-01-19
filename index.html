@@ -1,881 +1,913 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <base target="_top">
-  <?!= include('Styles'); ?>
+/**
+ * ============================================================
+ * Code.gs (FULL - DRIVER SEQ FIX - v4)
+ *
+ * ✅ 本版新增/修正（依你最新需求）：
+ * 0) 「倉別對照」支援 4 區：北 / 中 / 雲 / 南
+ * 1) getDailyTrips 回傳 warehouseRegionMap（Index 用）
+ * 2) 區配司機提貨地點：吃 F（聯結到貨倉），回傳到 area.items[].pickupAddr
+ * 3) 修正 E/F 單字 北/中/雲/南：顯示成 北倉/中倉/雲倉/南倉（避免 北 > 北）
+ * 4) totals：北上/南下依 E 區域；區配四分區依 F 區域（areaNorth/areaMid/areaYun/areaSouth）
+ * 5) ✅ 司機端（LIFF）轉運排序：改為讀「原始列」，用 姓名(轉) 尾巴數字 當 seq 排序
+ *    - 例：5徐廷順1 -> seq=1
+ *    - 例：5徐廷順2 -> seq=2
+ *    - 沒尾碼 -> seq=null（排最後）
+ * 6) 綁定：忽略數字比對；同 LINE 只能綁 1 人；同名多筆擋
+ *
+ * ============================================================
+ */
 
-  <style>
-    /* =========================
-       0) 強制讓 details 可點可展開
-       ========================= */
-    /* 有些 Styles 會用 pseudo/overlay 蓋住點擊，這裡硬救 */
-    details, summary { position: relative; }
-    summary { z-index: 50; pointer-events: auto !important; }
-    details > * { pointer-events: auto; }
-    .accBody, .driverBody { position: relative; z-index: 10; }
+// ===========================
+// doGet router
+// ===========================
+function doGet(e) {
+  var mode = (e && e.parameter && e.parameter.mode) ? String(e.parameter.mode) : "admin";
 
-    /* 如果 Styles 有卡片邊框的 :before/:after 蓋住 */
-    .card::before, .card::after,
-    .topbar::before, .topbar::after{
-      pointer-events: none !important;
+  // ✅ 自助綁定（JSONP）
+  if (mode === "bind_jsonp") {
+    var cb = (e && e.parameter && e.parameter.callback) ? String(e.parameter.callback) : "cb";
+    cb = cb.replace(/[^\w.$]/g, "");
+
+    var uid = (e && e.parameter && e.parameter.uid) ? String(e.parameter.uid).trim() : "";
+    var driverName = (e && e.parameter && e.parameter.driverName) ? String(e.parameter.driverName).trim() : "";
+
+    var payload;
+    try {
+      payload = bindDriverLineUserId_(uid, driverName);
+      payload.ok = true;
+    } catch (err) {
+      payload = { ok: false, message: (err && err.message) ? err.message : String(err) };
     }
 
-    /* ===== FIX: 區配 UI 爆版（字變直排） ===== */
-    .driverAcc summary,
-    .kpiAcc summary,
-    .acc summary{
-      align-items:flex-start;
-    }
-
-    .driverTop{min-width:0;}
-    .driverName{
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      max-width:560px;
-    }
-    .driverPreview{
-      min-width:0;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      max-width:560px;
-    }
-
-    .routeGroupTitle{gap:10px;}
-    .routeGroupTitle .t{
-      min-width:0;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-
-    /* task grid 中間欄位允許縮小，避免被擠成直排 */
-    .task .route{min-width:0;}
-    .task .route .main{
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-    .task .route .sub{
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-
-    /* 區配 task 是 details + summary：summary 內 grid 也要允許縮小 */
-    .areaTaskSummary .route{min-width:0;}
-    .areaTaskSummary .route .main{
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-    .areaTaskSummary .route .sub{
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-    .areaAddr .miniSub{
-      white-space:normal;
-      overflow-wrap:anywhere;
-      word-break:break-word;
-      line-height:1.35;
-    }
-
-    /* ✅ FIX: 區配每筆用 details 時，不要吃到 .task 的 grid 規則 */
-    .taskAcc{
-      display:block;
-      border:1px solid rgba(255,255,255,.10);
-      background:rgba(255,255,255,.03);
-      border-radius:12px;
-      overflow:hidden;
-    }
-    .taskAcc summary{
-      padding:8px 10px;
-      display:grid;
-      grid-template-columns:56px 1fr 70px;
-      gap:8px;
-      align-items:center;
-    }
-    .taskAcc summary .route{min-width:0;}
-    .taskAcc summary .route .main{
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-    .taskAcc summary .route .sub{
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-
-    /* 4 區配板塊標題顏色微調（可有可無） */
-    .zoneTitle { display:flex; align-items:center; gap:8px; }
-    .zonePill {
-      border:1px solid rgba(255,255,255,.12);
-      background:rgba(255,255,255,.06);
-      padding:2px 8px;
-      border-radius:999px;
-      font-size:12px;
-      opacity:.92;
-    }
-  </style>
-</head>
-
-<body>
-  <div class="wrap">
-    <div class="topbar">
-      <div class="brand">
-        <h1>每日車趟公告板</h1>
-        <div class="sub" id="subtitle">載入中…</div>
-      </div>
-      <div class="spacer"></div>
-
-      <label class="hint">選擇日期分頁</label>
-      <select id="dateSelect"></select>
-      <button id="btnLoad">產生</button>
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <h2>📣 今日公告（轉運 + 區配）</h2>
-
-        <div class="topSplit">
-          <!-- LEFT -->
-          <div class="box">
-            <div class="boxTitle"><span class="ico">📌</span>量感（點開看：貨主 → 幾版）</div>
-            <div class="kpiStack" id="kpiStack"></div>
-            <div class="empty" id="noKpi" style="display:none;">沒有 KPI 資料</div>
-          </div>
-
-          <!-- RIGHT -->
-          <div class="box">
-            <div class="boxTitle"><span class="ico">🚚</span>轉運提配資訊</div>
-            <div id="announce"></div>
-            <div class="empty" id="noAnnounce" style="display:none;">沒有公告資料</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Transfer Drivers -->
-      <div class="card">
-        <h2>🚚 轉運司機（收合看提貨>區域，點開看每條 E→F）</h2>
-        <div class="driverGrid" id="transferDrivers"></div>
-        <div class="empty" id="noTransferDrivers" style="display:none;">尚未填轉運司機姓名或今日無轉運司機資料</div>
-      </div>
-
-      <!-- Area 4 zones -->
-      <div class="card">
-        <h2 class="zoneTitle">🟣 北區配 <span class="zonePill">依 F 到貨倉區域</span></h2>
-        <div class="driverGrid" id="areaNorthDrivers"></div>
-        <div class="empty" id="noAreaNorthDrivers" style="display:none;">今日無北區配資料</div>
-      </div>
-
-      <div class="card">
-        <h2 class="zoneTitle">🟣 中區配 <span class="zonePill">依 F 到貨倉區域</span></h2>
-        <div class="driverGrid" id="areaMidDrivers"></div>
-        <div class="empty" id="noAreaMidDrivers" style="display:none;">今日無中區配資料</div>
-      </div>
-
-      <div class="card">
-        <h2 class="zoneTitle">🟣 雲區配 <span class="zonePill">依 F 到貨倉區域</span></h2>
-        <div class="driverGrid" id="areaYunDrivers"></div>
-        <div class="empty" id="noAreaYunDrivers" style="display:none;">今日無雲區配資料</div>
-      </div>
-
-      <div class="card">
-        <h2 class="zoneTitle">🟣 南區配 <span class="zonePill">依 F 到貨倉區域</span></h2>
-        <div class="driverGrid" id="areaSouthDrivers"></div>
-        <div class="empty" id="noAreaSouthDrivers" style="display:none;">今日無南區配資料</div>
-      </div>
-
-    </div>
-  </div>
-
-<script>
-  const el = (id) => document.getElementById(id);
-  const safeText = (v) => (v === null || v === undefined) ? '' : String(v);
-  const num = (v) => Number(v || 0);
-
-  function setLoading(on) {
-    el('btnLoad').disabled = on;
-    el('btnLoad').textContent = on ? '載入中…' : '產生';
+    return ContentService
+      .createTextOutput(cb + "(" + JSON.stringify(payload) + ");")
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
 
-  function gradeClass(g){
-    if (g === 'H') return 'h';
-    if (g === 'S') return 's';
-    return 'n';
+  // ✅ 讀司機任務（JSONP）
+  if (mode === "api_jsonp") {
+    var cb2 = (e && e.parameter && e.parameter.callback) ? String(e.parameter.callback) : "cb";
+    cb2 = cb2.replace(/[^\w.$]/g, "");
+
+    var uid2 = (e && e.parameter && e.parameter.uid) ? String(e.parameter.uid).trim() : "";
+    var dateTab = (e && e.parameter && e.parameter.date) ? String(e.parameter.date).trim() : "";
+
+    var payload2;
+    try {
+      payload2 = getLiffDriverDaily(uid2, dateTab);
+      payload2.ok = true;
+    } catch (err2) {
+      payload2 = { ok: false, message: (err2 && err2.message) ? err2.message : String(err2) };
+    }
+
+    return ContentService
+      .createTextOutput(cb2 + "(" + JSON.stringify(payload2) + ");")
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
 
-  // ====== name helpers (ignore digits) ======
-  function displayNameNoDigits(name){
-    return safeText(name).replace(/[0-9０-９]/g,'').trim();
+  // LIFF（保留）
+  if (mode === "liff") {
+    return HtmlService.createTemplateFromFile("Liff")
+      .evaluate()
+      .setTitle("司機今日任務")
+      .setSandboxMode(HtmlService.SandboxMode.IFRAME)
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
-  // ✅ 忽略 placeholder（例如 #999999）
-  function cleanReceiverLabel(v){
-    const s = safeText(v).trim();
-    if (!s) return '';
-    if (s.startsWith('#')) return '';
-    if (s === '999999') return '';
-    return s;
+  // admin
+  return HtmlService.createTemplateFromFile("Index")
+    .evaluate()
+    .setTitle("每日車趟公告板")
+    .setSandboxMode(HtmlService.SandboxMode.IFRAME)
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+// ===========================
+// Tabs (MMDD)
+// ===========================
+function getDateTabs() {
+  const ss = SpreadsheetApp.getActive();
+  return ss.getSheets()
+    .map(s => String(s.getName()).trim())
+    .filter(n => /^\d{4}$/.test(n))
+    .sort((a, b) => Number(a) - Number(b));
+}
+
+// ===========================
+// Date options for LIFF (D-2~D+2)
+// ===========================
+function getDateOptionsForLiff_() {
+  const ss = SpreadsheetApp.getActive();
+
+  const baseToday = new Date();
+  const nearest = findNearestExistingDateTab_(ss, baseToday, 14);
+  if (!nearest) throw new Error("找不到任何可用的 4 碼日期分頁（MMDD），且回溯 14 天也沒有。");
+
+  const dDate = nearest.date;
+  const dTab  = nearest.tab;
+
+  const tabIfExists = (deltaDays) => {
+    const dt = addDays_(dDate, deltaDays);
+    const tab = mmddForTaipei_(dt);
+    return ss.getSheetByName(tab) ? tab : null;
+  };
+
+  return {
+    baseToday: ymdForTaipei_(baseToday),
+    dMinus2: tabIfExists(-2),
+    dMinus1: tabIfExists(-1),
+    d: dTab,
+    dPlus1: tabIfExists(1),
+    dPlus2: tabIfExists(2)
+  };
+}
+
+function addDays_(dateObj, deltaDays) {
+  return new Date(dateObj.getTime() + deltaDays * 24 * 60 * 60 * 1000);
+}
+function mmddForTaipei_(dateObj) {
+  return Utilities.formatDate(dateObj, "Asia/Taipei", "MMdd");
+}
+function ymdForTaipei_(dateObj) {
+  return Utilities.formatDate(dateObj, "Asia/Taipei", "yyyy/MM/dd");
+}
+function findNearestExistingDateTab_(ss, baseDate, lookbackDays) {
+  for (let i = 0; i <= lookbackDays; i++) {
+    const dt  = addDays_(baseDate, -i);
+    const tab = mmddForTaipei_(dt);
+    if (ss.getSheetByName(tab)) return { tab, date: dt };
+  }
+  return null;
+}
+
+// ===========================
+// Name normalization
+// ===========================
+function normalizeDriverName_(name) {
+  return String(name || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[0-9０-９]/g, "")
+    .toLowerCase();
+}
+function cleanDriverDisplay_(name) {
+  return String(name || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[0-9０-９]/g, "");
+}
+function normalizeNameCJK_(name) {
+  const s = String(name || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[0-9０-９]/g, "");
+  const onlyCjk = (s.match(/[\u3400-\u9FFF]+/g) || []).join("");
+  return onlyCjk;
+}
+
+// ===========================
+// Warehouse display cleanup (E/F 顯示修正)
+// ===========================
+function cleanWarehouseDisplay_(s) {
+  const v = String(s || "").trim();
+  if (!v) return "";
+  if (v === "北") return "北倉";
+  if (v === "中") return "中倉";
+  if (v === "雲") return "雲倉";
+  if (v === "南") return "南倉";
+  return v;
+}
+
+// ===========================
+// 倉別對照：分頁「倉別對照」
+// - A: 倉別代碼/名稱
+// - B: 區域（北/中/雲/南）
+// ===========================
+function normalizeWarehouseKey_(s) {
+  return String(s || "").trim().replace(/\s+/g, "").toLowerCase();
+}
+
+function getWarehouseRegionMap_() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName("倉別對照");
+  if (!sh) return {};
+
+  const values = sh.getDataRange().getValues();
+  if (!values || values.length === 0) return {};
+
+  const map = {};
+  let startRow = 0;
+
+  // 若第一列像表頭就跳過
+  const h0 = String(values[0][0] || "").trim();
+  const h1 = String(values[0][1] || "").trim();
+  if (h0.includes("倉") || h1.includes("區")) startRow = 1;
+
+  for (let i = startRow; i < values.length; i++) {
+    const code = String(values[i][0] || "").trim();
+    const region = String(values[i][1] || "").trim();
+    if (!code || !region) continue;
+
+    const key = normalizeWarehouseKey_(code);
+    if (!key) continue;
+
+    if (region === "北" || region === "中" || region === "雲" || region === "南") {
+      map[key] = region;
+    }
+  }
+  return map;
+}
+
+function regionOfWarehouse_(raw, map) {
+  const s = String(raw || "").trim();
+  if (!s) return "不明";
+
+  const key = normalizeWarehouseKey_(s);
+  if (map && map[key]) return map[key];
+
+  // fuzzy contains
+  if (map) {
+    for (var k in map) {
+      if (!k) continue;
+      if (key.includes(k)) return map[k];
+    }
   }
 
-  // ===== 倉別對照 map helpers（前端也做一份，防止資料怪） =====
-  function normalizeWarehouseKey(s){
-    return safeText(s).trim().replace(/\s+/g,'').toLowerCase();
+  // fallback
+  if (s.includes("北")) return "北";
+  if (s.includes("中")) return "中";
+  if (s.includes("雲")) return "雲";
+  if (s.includes("南")) return "南";
+  return "不明";
+}
+
+// ===========================
+// Parse tail seq only (轉運/區配都共用)
+// ===========================
+function parseNameWithTailSeqOnly_(raw) {
+  const s0 = String(raw || "").trim().replace(/\s+/g, "");
+  if (!s0) return { name: "", seq: null };
+
+  const s = s0.replace(/[０-９]/g, ch => String(ch.charCodeAt(0) - 0xFF10));
+
+  const m = s.match(/^(.*?)(\d+)$/);
+  if (!m) return { name: s0, seq: null };
+
+  const namePart = String(m[1] || "");
+  const seq = Number(m[2]);
+  return { name: namePart || s0, seq: Number.isFinite(seq) ? seq : null };
+}
+
+// ===========================
+// Driver binding: sheet「司機對照」
+// header: driverName | lineUserId | enabled
+// ===========================
+function bindDriverLineUserId_(lineUserId, driverName) {
+  const uid = String(lineUserId || "").trim();
+  const name = String(driverName || "").trim();
+
+  if (!uid) throw new Error("缺少 lineUserId（LIFF 未取到 userId）");
+  if (!name) throw new Error("請輸入姓名（系統會忽略姓名中的數字）");
+
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName("司機對照");
+  if (!sh) throw new Error("找不到分頁：司機對照");
+
+  const values = sh.getDataRange().getValues();
+  if (!values || values.length < 2) throw new Error("司機對照沒有資料（至少要有表頭與一筆以上）");
+
+  const header = values[0].map(x => String(x || "").trim());
+  const idxName = header.indexOf("driverName");
+  const idxUid  = header.indexOf("lineUserId");
+  const idxEn   = header.indexOf("enabled");
+  if (idxName < 0 || idxUid < 0 || idxEn < 0) {
+    throw new Error("司機對照表頭需包含：driverName, lineUserId, enabled");
   }
 
-  function regionByMap(raw, map){
-    const s = safeText(raw).trim();
-    if (!s) return '不明';
+  const inputNorm = normalizeDriverName_(name);
 
-    const key = normalizeWarehouseKey(s);
-    if (map && map[key]) return map[key];
+  // uid 是否已綁其他人
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const rowUid = String(row[idxUid] || "").trim();
+    const rowName = String(row[idxName] || "").trim();
+    const enabled = String(row[idxEn] || "").trim().toUpperCase();
 
-    // fuzzy includes
-    if (map) {
-      for (const k in map){
-        if (!k) continue;
-        if (key.includes(k)) return map[k];
+    if (rowUid === uid && enabled === "TRUE") {
+      const rowNorm = normalizeDriverName_(rowName);
+      if (rowNorm && rowNorm !== inputNorm) {
+        throw new Error("此 LINE 已綁定其他司機：" + cleanDriverDisplay_(rowName) + "（如需更換請聯絡管理員）");
       }
     }
-
-    // fallback
-    if (s.includes('北')) return '北';
-    if (s.includes('中')) return '中';
-    if (s.includes('雲')) return '雲';
-    if (s.includes('南')) return '南';
-    return '不明';
   }
 
-  // region helpers（右上公告目前仍用 dropoff 字串判斷）
-  function regionOf(s){
-    const v = safeText(s).trim();
-    if (!v) return '不明';
-    if (v.includes('北')) return '北';
-    if (v.includes('南')) return '南';
-    if (v.includes('中')) return '中';
-    if (v.includes('雲')) return '雲';
-    return '不明';
-  }
-
-  function uniq(arr){
-    const out = [];
-    const seen = new Set();
-    (arr || []).forEach(x=>{
-      const k = safeText(x).trim();
-      if (!k) return;
-      if (seen.has(k)) return;
-      seen.add(k);
-      out.push(k);
-    });
-    return out;
-  }
-
-  function formatDropBreakdown(drops){
-    return (drops || [])
-      .filter(x => safeText(x.dropoff).trim())
-      .map(x => `${safeText(x.dropoff)} ${num(x.boards)}版`)
-      .join(' / ');
-  }
-
-  // ===== RIGHT (announce) =====
-  function renderAnnounce(container, pivotArr) {
-    container.innerHTML = '';
-    if (!pivotArr || pivotArr.length === 0) return;
-
-    pivotArr.forEach(group => {
-      const det = document.createElement('details');
-      det.className = 'acc';
-
-      const pickup = safeText(group.pickup);
-
-      const toRegionsAll = uniq((group.items || []).map(x => regionOf(x.dropoff)));
-      const toRegions = toRegionsAll.filter(r => r !== '不明');
-      const toLine = toRegions.length ? toRegions.join(' / ') : '不明';
-
-      const dropCount = (group.items || []).length;
-
-      const sum = document.createElement('summary');
-      sum.innerHTML = `
-        <div class="sumLeft">
-          <div class="sumTitle">${pickup}  &nbsp;>&nbsp;  ${toLine}</div>
-          <div class="sumSub">送貨點：${dropCount} 個（點開看明細/貨主）</div>
-        </div>
-        <div class="sumRight">${num(group.subtotal)} 版</div>
-      `;
-      det.appendChild(sum);
-
-      const body = document.createElement('div');
-      body.className = 'accBody';
-
-      (group.items || []).forEach(x => {
-        const r = document.createElement('div');
-        r.className = 'palletRow';
-        r.innerHTML = `
-          <div class="palletLeft">
-            <span class="palletIcon">🧱</span>
-            <div class="palletText">${safeText(x.dropoff)}</div>
-          </div>
-          <div class="palletNum">${num(x.boards)} 版</div>
-        `;
-        body.appendChild(r);
+  // 找姓名（忽略數字）
+  let matches = [];
+  for (let i = 1; i < values.length; i++) {
+    const rowName = String(values[i][idxName] || "").trim();
+    const rowNorm = normalizeDriverName_(rowName);
+    if (rowNorm && rowNorm === inputNorm) {
+      matches.push({
+        rowIndex: i + 1,
+        rowName: rowName,
+        existingUid: String(values[i][idxUid] || "").trim()
       });
-
-      const div = document.createElement('div');
-      div.className = 'divider';
-      body.appendChild(div);
-
-      if (group.ownerDropItems && group.ownerDropItems.length){
-        (group.ownerDropItems || []).forEach(x => {
-          const r = document.createElement('div');
-          r.className = 'miniRow';
-          r.innerHTML = `
-            <div class="miniLeft">
-              <div class="miniTitle">🧱 ${safeText(x.owner)}　抵達倉庫：${formatDropBreakdown(x.drops)}</div>
-            </div>
-            <div class="miniNum">共 ${num(x.totalBoards)} 版</div>
-          `;
-          body.appendChild(r);
-        });
-      } else {
-        (group.ownerItems || []).forEach(x => {
-          const r = document.createElement('div');
-          r.className = 'miniRow';
-          r.innerHTML = `
-            <div class="miniLeft">
-              <div class="miniTitle">🧱 ${safeText(x.owner)}</div>
-            </div>
-            <div class="miniNum">${num(x.boards)} 版</div>
-          `;
-          body.appendChild(r);
-        });
-      }
-
-      det.appendChild(body);
-      container.appendChild(det);
-    });
+    }
   }
 
-  // ===== LEFT: KPI =====
-  function buildOwnerByDir(pivotArr){
-    const dirs = { north:new Map(), south:new Map(), local:new Map(), unknown:new Map() };
+  if (matches.length === 0) {
+    throw new Error("找不到此姓名（系統會忽略數字比對）。請確認調度已在「司機對照」建立你的姓名。");
+  }
+  if (matches.length > 1) {
+    const list = matches.map(x => cleanDriverDisplay_(x.rowName)).join("、");
+    throw new Error("同名（忽略數字）有多筆，請聯絡管理員指定正確姓名：" + list);
+  }
 
-    (pivotArr || []).forEach(g => {
-      // 這段沿用你原本的方向判斷（之後你若要改成倉別對照再做）
-      const from = regionOf(g.pickup);
-      const toRegions = uniq((g.items || []).map(x => regionOf(x.dropoff)));
+  const m = matches[0];
 
-      let bucket = 'unknown';
-      if (from === '北' && (toRegions.includes('南') || toRegions.includes('中') || toRegions.includes('雲'))) bucket = 'south';
-      else if ((from === '南' || from === '中' || from === '雲') && (toRegions.includes('北'))) bucket = 'north';
-      else if (from !== '不明' && toRegions.length === 1 && toRegions[0] === from) bucket = 'local';
-      else bucket = 'unknown';
+  if (m.existingUid && m.existingUid !== uid) {
+    throw new Error("此姓名已綁定其他 LINE（如需更換請聯絡管理員）");
+  }
 
-      (g.ownerItems || []).forEach(o => {
-        const name = safeText(o.owner) || '(未填貨主)';
-        dirs[bucket].set(name, (dirs[bucket].get(name) || 0) + num(o.boards));
+  sh.getRange(m.rowIndex, idxUid + 1).setValue(uid);
+  sh.getRange(m.rowIndex, idxEn + 1).setValue("TRUE");
+
+  return {
+    message: "綁定成功",
+    driverName: cleanDriverDisplay_(m.rowName),
+    driverNameRaw: m.rowName,
+    lineUserId: uid
+  };
+}
+
+// ===========================
+// LIFF daily payload: returns `me`
+// ✅ 轉運使用「原始列」與 B 尾碼 seq 排序
+// ===========================
+function getLiffDriverDaily(lineUserId, dateTab) {
+  if (!lineUserId) throw new Error("缺少 lineUserId（LIFF 未取到 userId）");
+
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName("司機對照");
+  if (!sh) throw new Error("找不到分頁：司機對照（需 driverName/lineUserId/enabled）");
+
+  const values = sh.getDataRange().getValues();
+  if (!values || values.length < 2) throw new Error("司機對照沒有資料");
+
+  const header = values[0].map(x => String(x || "").trim());
+  const idxName = header.indexOf("driverName");
+  const idxUid  = header.indexOf("lineUserId");
+  const idxEn   = header.indexOf("enabled");
+  if (idxName < 0 || idxUid < 0 || idxEn < 0) {
+    throw new Error("司機對照表頭需包含：driverName, lineUserId, enabled");
+  }
+
+  const uid = String(lineUserId).trim();
+  let driverNameRaw = null;
+
+  for (let i = 1; i < values.length; i++) {
+    const rowUid = String(values[i][idxUid] || "").trim();
+    const enabled = String(values[i][idxEn] || "").trim().toUpperCase();
+    if (rowUid === uid && enabled === "TRUE") {
+      driverNameRaw = String(values[i][idxName] || "").trim();
+      break;
+    }
+  }
+
+  if (!driverNameRaw) {
+    throw new Error("此 LINE 尚未綁定司機（或 enabled 不是 TRUE）。請在畫面內輸入姓名完成綁定。");
+  }
+
+  const opt = getDateOptionsForLiff_();
+
+  let chosen = opt.d;
+  if (dateTab && /^\d{4}$/.test(String(dateTab))) {
+    const dt = String(dateTab).trim();
+    if (!ss.getSheetByName(dt)) throw new Error("找不到分頁：" + dt);
+    chosen = dt;
+  }
+
+  // 司機端要：原始列（含轉運 seq） + 你原本的 daily（保留除錯）
+  const rawPack = readRowsForLiff_(chosen);
+  const daily = getDailyTrips(chosen);
+
+  const me = buildMeFromRows_(driverNameRaw, rawPack.rows);
+
+  return {
+    driverName: me.driverName,
+    chosenDate: chosen,
+    options: opt,
+    daily,     // 保留除錯
+    me
+  };
+}
+
+// 司機端專用：直接讀原始列（不合併）以保留 seq
+function readRowsForLiff_(tabName) {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(String(tabName).trim());
+  if (!sh) throw new Error("找不到分頁：" + tabName);
+
+  const values = sh.getDataRange().getValues();
+  if (!values || values.length < 2) return { rows: [] };
+
+  const headers = values[0].map(x => String(x || "").trim());
+  const col = buildColumnMap_(headers);
+
+  const rowsRaw = values.slice(1).filter(r => r.some(c => String(c || "").trim() !== ""));
+
+  const rows = [];
+  for (const r of rowsRaw) {
+    const row = normalizeRowForLiff_(r, col);
+    if (row) rows.push(row);
+  }
+  return { rows };
+}
+
+// 司機端 row：保留 transferSeq（姓名(轉) 尾巴） + areaSeq（姓名(區) 尾巴）
+function normalizeRowForLiff_(r, col) {
+  const get = (i) => (i == null || i < 0) ? "" : String(r[i] ?? "").trim();
+
+  const pickupRaw  = get(col.pickup);
+  const dropoffRaw = get(col.dropoff);
+
+  const pickup  = cleanWarehouseDisplay_(pickupRaw);
+  const dropoff = cleanWarehouseDisplay_(dropoffRaw);
+
+  const driverTransferRaw = get(col.driverTransfer);
+  const driverAreaRaw     = get(col.driverArea);
+
+  const transferParsed = parseNameWithTailSeqOnly_(driverTransferRaw);
+  const areaParsed     = parseNameWithTailSeqOnly_(driverAreaRaw);
+
+  const transferDriver = cleanDriverDisplay_(transferParsed.name);
+  const transferSeq    = transferParsed.seq;
+
+  const areaDriver = cleanDriverDisplay_(areaParsed.name);
+  const areaSeq    = areaParsed.seq;
+
+  const receiver = get(col.receiver);
+  const owner    = get(col.owner);
+  const carNo    = get(col.carNo);
+  const note     = get(col.note);
+
+  // 區配提貨地點：F（到貨倉）
+  const areaPickupAddr = cleanWarehouseDisplay_(get(col.dropoff));
+  const areaDropAddr   = get(col.areaDropAddr);
+
+  // boards
+  let boards = 0;
+  const bRaw = (col.boards >= 0) ? r[col.boards] : 0;
+  if (typeof bRaw === "number") boards = bRaw;
+  else boards = Number(String(bRaw || "").replace(/[^\d.\-]/g, "") || 0);
+  if (!isFinite(boards)) boards = 0;
+
+  // grade
+  let grade = get(col.grade).toUpperCase().replace(/\s+/g, "");
+  if (grade === "A") grade = "S";
+  if (grade !== "H" && grade !== "S") grade = "S";
+
+  const hasAny = pickup || dropoff || transferDriver || areaDriver || receiver || owner || boards !== 0;
+  if (!hasAny) return null;
+
+  return {
+    pickup, dropoff,
+    boards, grade,
+    owner, carNo, note,
+    receiver,
+    transferDriver, transferSeq,
+    areaDriver, areaSeq,
+    areaPickupAddr,
+    areaDropAddr
+  };
+}
+
+// 司機端：用原始列組 me（轉運依 transferSeq 排序、區配依 areaSeq 排序）
+function buildMeFromRows_(driverNameRaw, rows) {
+  const meNorm = normalizeNameCJK_(driverNameRaw);
+
+  const transfer = [];
+  const area = [];
+
+  for (const r of (rows || [])) {
+    if (normalizeNameCJK_(r.transferDriver) === meNorm) {
+      transfer.push({
+        pickup: r.pickup,
+        dropoff: r.dropoff,
+        boards: r.boards,
+        grade: r.grade,
+        owner: r.owner || "",
+        carNo: r.carNo || "",
+        note: r.note || "",
+        seq: (r.transferSeq === null || r.transferSeq === undefined) ? null : Number(r.transferSeq)
       });
-    });
+    }
 
-    const toArr = (m) => Array.from(m.entries())
-      .map(([owner, boards])=>({owner, boards}))
-      .sort((a,b)=>b.boards-a.boards);
+    if (normalizeNameCJK_(r.areaDriver) === meNorm) {
+      area.push({
+        pickup: r.pickup,
+        dropoff: r.dropoff,
+        dropLabel: r.receiver || "",
+        receiver: r.receiver || "",
+        pickupAddr: r.areaPickupAddr || "",
+        recvAddr: r.areaDropAddr || "",
+        boards: r.boards,
+        grade: r.grade,
+        owner: r.owner || "",
+        carNo: r.carNo || "",
+        note: r.note || "",
+        seq: (r.areaSeq === null || r.areaSeq === undefined) ? null : Number(r.areaSeq)
+      });
+    }
+  }
 
+  transfer.sort((a,b)=>{
+    const sa = (a.seq === null || a.seq === undefined) ? 999999 : Number(a.seq);
+    const sb = (b.seq === null || b.seq === undefined) ? 999999 : Number(b.seq);
+    if (sa !== sb) return sa - sb;
+    return Number(b.boards||0) - Number(a.boards||0);
+  });
+
+  area.sort((a,b)=>{
+    const sa = (a.seq === null || a.seq === undefined) ? 999999 : Number(a.seq);
+    const sb = (b.seq === null || b.seq === undefined) ? 999999 : Number(b.seq);
+    if (sa !== sb) return sa - sb;
+    return Number(b.boards||0) - Number(a.boards||0);
+  });
+
+  const me = {
+    driverName: cleanDriverDisplay_(driverNameRaw),
+    driverNameRaw: driverNameRaw,
+    driverNameNorm: meNorm,
+    transfer: {
+      count: transfer.length,
+      totalBoards: transfer.reduce((s,x)=>s+Number(x.boards||0),0),
+      items: transfer
+    },
+    area: {
+      count: area.length,
+      totalBoards: area.reduce((s,x)=>s+Number(x.boards||0),0),
+      items: area
+    }
+  };
+  me.hasTasks = (transfer.length + area.length) > 0;
+  return me;
+}
+
+// ===========================
+// getDailyTrips(tabName) for Index
+// ===========================
+function getDailyTrips(tabName) {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(String(tabName).trim());
+  if (!sh) throw new Error("找不到分頁：" + tabName);
+
+  const values = sh.getDataRange().getValues();
+  if (!values || values.length < 2) {
     return {
-      north: toArr(dirs.north),
-      south: toArr(dirs.south),
-      local: toArr(dirs.local),
-      unknown: toArr(dirs.unknown),
+      date: tabName,
+      totals: {
+        totalBoards: 0, north: 0, south: 0, area: 0, unknown: 0,
+        transferTotal: 0, localTotal: 0,
+        areaNorth: 0, areaMid: 0, areaYun: 0, areaSouth: 0
+      },
+      block1: { pickupToDropAll: [] },
+      block2: { transferDrivers: [], areaDrivers: [] },
+      warehouseRegionMap: getWarehouseRegionMap_()
     };
   }
 
-  function makeKpiAcc(label, value, hint, ownerList){
-    const det = document.createElement('details');
-    det.className = 'kpiAcc';
+  const headers = values[0].map(x => String(x || "").trim());
+  const rowsRaw = values.slice(1).filter(r => r.some(c => String(c || "").trim() !== ""));
 
-    const sum = document.createElement('summary');
-    sum.innerHTML = `
-      <div class="kpiLeft">
-        <div class="kpiLabel">${safeText(label)}</div>
-        <div class="kpiHint">${safeText(hint || '點開看：貨主 → 幾版')}</div>
-      </div>
-      <div class="kpiVal">${num(value)}</div>
-    `;
-    det.appendChild(sum);
+  const col = buildColumnMap_(headers);
 
-    if (ownerList && ownerList.length){
-      const body = document.createElement('div');
-      body.className = 'accBody';
-      ownerList.slice(0, 20).forEach(x => {
-        const r = document.createElement('div');
-        r.className = 'miniRow';
-        r.innerHTML = `
-          <div class="miniLeft">
-            <div class="miniTitle">${safeText(x.owner)}</div>
-          </div>
-          <div class="miniNum">${num(x.boards)} 版</div>
-        `;
-        body.appendChild(r);
-      });
-      det.appendChild(body);
+  const rows = rowsRaw
+    .map(r => normalizeRow_(r, col))
+    .filter(Boolean);
+
+  const pickupToDropAll = pivotPickupToDropWithOwners_(rows);
+  const transferDrivers = groupByTransferDriver_(rows);
+  const areaDrivers = groupByAreaDriver_(rows);
+
+  const totals = buildTotals_(pickupToDropAll, rows);
+
+  return {
+    date: tabName,
+    totals,
+    block1: { pickupToDropAll },
+    block2: { transferDrivers, areaDrivers },
+    warehouseRegionMap: getWarehouseRegionMap_()
+  };
+}
+
+// ===========================
+// Column mapping (Index + LIFF 共用)
+// ===========================
+function buildColumnMap_(headers) {
+  const idxByName = {};
+  headers.forEach((h, i) => { idxByName[String(h || "").trim()] = i; });
+
+  const must = (name) => {
+    const i = idxByName[name];
+    return (i === undefined) ? -1 : i;
+  };
+
+  return {
+    pickup:  must("聯結提貨倉"),        // E
+    dropoff: must("聯結到貨倉"),        // F
+    boards:  must("板數"),
+
+    driverTransfer: must("姓名(轉)"),   // B
+    driverArea:     must("姓名(區)"),
+
+    grade:    must("配送等級 H / A"),
+    carNo:    must("車號"),
+    note:     must("出庫單備註"),
+    owner:    must("貨主"),
+    receiver: must("收件人姓名"),
+
+    // 區配收件人地址（I）
+    areaDropAddr: must("區配收件人地址")
+  };
+}
+
+// ===========================
+// Row normalize (Index 用：合併顯示仍走這裡)
+// ===========================
+function normalizeRow_(r, col) {
+  const get = (i) => (i == null || i < 0) ? "" : String(r[i] ?? "").trim();
+
+  const pickup  = cleanWarehouseDisplay_(get(col.pickup));
+  const dropoff = cleanWarehouseDisplay_(get(col.dropoff));
+
+  const driverTransferRaw = get(col.driverTransfer);
+  const driverAreaRaw = get(col.driverArea);
+
+  const receiver = get(col.receiver);
+  const owner   = get(col.owner);
+  const carNo   = get(col.carNo);
+  const note    = get(col.note);
+
+  // 區配提貨地點：F
+  const areaPickupAddr = cleanWarehouseDisplay_(get(col.dropoff));
+  const areaDropAddr   = get(col.areaDropAddr);
+
+  // boards
+  let boards = 0;
+  const bRaw = (col.boards >= 0) ? r[col.boards] : 0;
+  if (typeof bRaw === "number") boards = bRaw;
+  else boards = Number(String(bRaw || "").replace(/[^\d.\-]/g, "") || 0);
+  if (!isFinite(boards)) boards = 0;
+
+  // grade
+  let grade = get(col.grade).toUpperCase().replace(/\s+/g, "");
+  if (grade === "A") grade = "S";
+  if (grade !== "H" && grade !== "S") grade = "S";
+
+  // area seq: tail digits only
+  const areaParsed = parseNameWithTailSeqOnly_(driverAreaRaw);
+  const areaDriver = cleanDriverDisplay_(areaParsed.name);
+  const areaSeq = areaParsed.seq;
+
+  const transferParsed = parseNameWithTailSeqOnly_(driverTransferRaw);
+  const transferDriver = cleanDriverDisplay_(transferParsed.name);
+
+  const hasAny =
+    pickup || dropoff || transferDriver || areaDriver || receiver || owner || boards !== 0;
+  if (!hasAny) return null;
+
+  return {
+    pickup, dropoff,
+    owner, carNo, note, grade, boards,
+    receiver,
+
+    transferDriver,
+
+    areaDriverRaw: driverAreaRaw,
+    areaDriver,
+    areaSeq,
+
+    areaPickupAddr,
+    areaDropAddr
+  };
+}
+
+// ===========================
+// Pivot announce: pickup -> drops + owner breakdown
+// ===========================
+function pivotPickupToDropWithOwners_(rows) {
+  const map = new Map();
+
+  rows.forEach(row => {
+    const pickup = row.pickup || "";
+    if (!pickup) return;
+
+    const drop  = row.dropoff || "";
+    const owner = row.owner || "";
+    const b     = Number(row.boards || 0);
+
+    if (!map.has(pickup)) {
+      map.set(pickup, { pickup, subtotal: 0, dropMap: {}, ownerMap: {}, ownerDropMap: {} });
     }
-    return det;
+
+    const g = map.get(pickup);
+    g.subtotal += b;
+
+    if (drop) g.dropMap[drop] = (g.dropMap[drop] || 0) + b;
+
+    const ownerKey = owner || "(未填貨主)";
+    g.ownerMap[ownerKey] = (g.ownerMap[ownerKey] || 0) + b;
+    if (!g.ownerDropMap[ownerKey]) g.ownerDropMap[ownerKey] = {};
+    if (drop) g.ownerDropMap[ownerKey][drop] = (g.ownerDropMap[ownerKey][drop] || 0) + b;
+  });
+
+  const out = Array.from(map.values()).map(g => {
+    const items = Object.entries(g.dropMap)
+      .map(([dropoff, boards]) => ({ dropoff, boards }))
+      .sort((a, b) => Number(b.boards) - Number(a.boards));
+
+    const ownerItems = Object.entries(g.ownerMap)
+      .map(([owner, boards]) => ({ owner, boards }))
+      .sort((a, b) => Number(b.boards) - Number(a.boards));
+
+    const ownerDropItems = Object.keys(g.ownerDropMap).map(owner => {
+      const dropsObj = g.ownerDropMap[owner] || {};
+      const drops = Object.entries(dropsObj)
+        .map(([dropoff, boards]) => ({ dropoff, boards }))
+        .sort((a, b) => Number(b.boards) - Number(a.boards));
+      const totalBoards = drops.reduce((s, x) => s + Number(x.boards || 0), 0);
+      return { owner, totalBoards, drops };
+    }).sort((a, b) => Number(b.totalBoards) - Number(a.totalBoards));
+
+    return { pickup: g.pickup, subtotal: g.subtotal, items, ownerItems, ownerDropItems };
+  });
+
+  out.sort((a, b) => Number(b.subtotal) - Number(a.subtotal));
+  return out;
+}
+
+// ===========================
+// Group: transfer driver (Index 用：合併同路徑)
+// ===========================
+function groupByTransferDriver_(rows) {
+  const driverMap = new Map();
+
+  for (const r of rows) {
+    const driver = String(r.transferDriver || "").trim();
+    if (!driver) continue;
+
+    if (!driverMap.has(driver)) driverMap.set(driver, { driver, agg: new Map() });
+    const d = driverMap.get(driver);
+
+    const pickup = r.pickup || "";
+    const dropoff = r.dropoff || "";
+    const key = pickup + "||" + dropoff;
+
+    if (!d.agg.has(key)) {
+      d.agg.set(key, {
+        pickup, dropoff,
+        boards: 0,
+        grade: "S",
+        ownerSet: new Set(),
+        carSet: new Set(),
+        noteSet: new Set()
+      });
+    }
+
+    const a = d.agg.get(key);
+    a.boards += Number(r.boards || 0);
+    if (r.grade === "H") a.grade = "H";
+    if (r.owner) a.ownerSet.add(String(r.owner));
+    if (r.carNo) a.carSet.add(String(r.carNo));
+    if (r.note)  a.noteSet.add(String(r.note));
   }
 
-  function renderKpis(container, totals, ownerByDir){
-    container.innerHTML = '';
-
-    // 你最新需求要把「區域配送」拆四個 KPI
-    const hintTotal = `北上:${num(totals.north)}｜南下:${num(totals.south)}｜區配:${num(totals.localTotal)}`;
-
-    container.appendChild(makeKpiAcc('📦 公告總量（版）', totals.totalBoards, hintTotal, []));
-    container.appendChild(makeKpiAcc('⬆ 北上（版）', totals.north, '點開看：北上貨主 → 幾版', ownerByDir.north));
-    container.appendChild(makeKpiAcc('⬇ 南下（版）', totals.south, '點開看：南下貨主 → 幾版', ownerByDir.south));
-
-    // ✅ 4 區配 KPI（若 Code.gs 有回傳 areaNorth/areaMid/areaYun/areaSouth 就會顯示正確）
-    container.appendChild(makeKpiAcc('🟣 北區配（版）', totals.areaNorth || 0, '點開看：北區配貨主 → 幾版', []));
-    container.appendChild(makeKpiAcc('🟣 中區配（版）', totals.areaMid || 0, '點開看：中區配貨主 → 幾版', []));
-    container.appendChild(makeKpiAcc('🟣 雲區配（版）', totals.areaYun || 0, '點開看：雲區配貨主 → 幾版', []));
-    container.appendChild(makeKpiAcc('🟣 南區配（版）', totals.areaSouth || 0, '點開看：南區配貨主 → 幾版', []));
-
-    container.appendChild(makeKpiAcc('⚪ 無法判斷（版）', totals.unknown, '點開看：不明貨主 → 幾版', ownerByDir.unknown));
-    container.appendChild(makeKpiAcc('🚛 轉運總量（版）', totals.transferTotal, '（總量資訊）', []));
-    container.appendChild(makeKpiAcc('🧩 區配總量（版）', totals.localTotal, '（總量資訊）', []));
-  }
-
-  // ===== Transfer Drivers =====
-  function groupDriverItemsByPickup(items){
-    const m = new Map();
-    (items || []).forEach(t => {
-      const k = safeText(t.pickup);
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(t);
-    });
-
-    return Array.from(m.entries()).map(([pickup, list]) => {
-      const toRegionsAll = uniq(list.map(x => regionOf(x.dropoff)));
-      const toRegions = toRegionsAll.filter(r => r !== '不明');
-      const toLine = toRegions.length ? toRegions.join(' / ') : '不明';
-      return {
-        pickup,
-        toLine,
-        subtotal: list.reduce((s,x)=>s+num(x.boards),0),
-        list
-      };
-    }).sort((a,b)=>b.subtotal-a.subtotal);
-  }
-
-  function mergeSameRoute(list){
-    const map = new Map();
-    (list || []).forEach(t => {
-      const pickup = safeText(t.pickup);
-      const dropoff = safeText(t.dropoff);
-      const key = pickup + '→' + dropoff;
-
-      if (!map.has(key)) {
-        map.set(key, {
-          pickup,
-          dropoff,
-          boards: 0,
-          grade: 'S',
-          carNos: new Set(),
-          owners: new Set(),
-          notes: new Set()
-        });
-      }
-      const g = map.get(key);
-
-      g.boards += num(t.boards);
-
-      const tg = (safeText(t.grade).toUpperCase() || 'S');
-      if (tg === 'H') g.grade = 'H';
-
-      const carNo = safeText(t.carNo).trim();
-      if (carNo) g.carNos.add(carNo);
-
-      const owner = safeText(t.owner).trim();
-      if (owner) g.owners.add(owner);
-
-      const note = safeText(t.note).trim();
-      if (note) g.notes.add(note);
-    });
-
-    const out = Array.from(map.values()).map(x => ({
+  const result = [];
+  for (const [driver, d] of driverMap.entries()) {
+    const items = Array.from(d.agg.values()).map(x => ({
       pickup: x.pickup,
       dropoff: x.dropoff,
       boards: x.boards,
       grade: x.grade,
-      carNo: Array.from(x.carNos).join('、'),
-      owner: Array.from(x.owners).join('、'),
-      note: Array.from(x.notes).join('｜')
-    }));
+      owner: Array.from(x.ownerSet).join(" / "),
+      carNo: Array.from(x.carSet).join(" / "),
+      note: Array.from(x.noteSet).join(" / ")
+    })).sort((a, b) => Number(b.boards) - Number(a.boards));
 
-    out.sort((a,b)=> num(b.boards) - num(a.boards));
-    return out;
+    const totalBoards = items.reduce((s, x) => s + Number(x.boards || 0), 0);
+    result.push({ driver: cleanDriverDisplay_(driver), count: items.length, totalBoards, items });
   }
 
-  function renderTransferDrivers(container, drivers) {
-    container.innerHTML = '';
-    if (!drivers || drivers.length === 0) return;
+  result.sort((a, b) => Number(b.totalBoards) - Number(a.totalBoards));
+  return result;
+}
 
-    // ✅ 若 Code.gs 有回傳 driverSeq，就照 seq 排；否則照 totalBoards
-    const list = (drivers || []).slice().sort((a,b)=>{
-      const sa = (a.driverSeq==null)?999999:Number(a.driverSeq);
-      const sb = (b.driverSeq==null)?999999:Number(b.driverSeq);
-      if (sa !== sb) return sa - sb;
-      return num(b.totalBoards) - num(a.totalBoards);
-    });
+// ===========================
+// Group: area driver (Index 用)
+// ===========================
+function groupByAreaDriver_(rows) {
+  const driverMap = new Map();
 
-    list.forEach(d => {
-      const det = document.createElement('details');
-      det.className = 'driverAcc';
+  for (const r of rows) {
+    const driver = String(r.areaDriver || "").trim();
+    if (!driver) continue;
 
-      const groups = groupDriverItemsByPickup(d.items || []);
-      const preview = groups.slice(0,3).map(g => `${g.pickup} > ${g.toLine}`).join(' ｜ ');
+    if (!driverMap.has(driver)) driverMap.set(driver, { driver, items: [] });
+    const d = driverMap.get(driver);
 
-      const sum = document.createElement('summary');
-      sum.innerHTML = `
-        <div class="driverTop">
-          <div class="driverName">🚚 ${displayNameNoDigits(d.driver)}</div>
-          <div class="driverPreview">${preview || ''}</div>
-        </div>
-        <div class="chips">
-          <div class="chip">筆數：${num(d.count)}</div>
-          <div class="chip">總版數：${num(d.totalBoards)}</div>
-        </div>
-      `;
-      det.appendChild(sum);
-
-      const body = document.createElement('div');
-      body.className = 'driverBody';
-
-      groups.forEach(g => {
-        const box = document.createElement('div');
-        box.className = 'routeGroup';
-
-        box.innerHTML = `
-          <div class="routeGroupTitle">
-            <div class="t">${safeText(g.pickup)}  &nbsp;>&nbsp;  ${safeText(g.toLine)}</div>
-            <div class="n">${num(g.subtotal)} 版</div>
-          </div>
-          <div class="routeGroupList"></div>
-        `;
-
-        const listEl = box.querySelector('.routeGroupList');
-        const mergedList = mergeSameRoute(g.list || []);
-
-        (mergedList || []).forEach(t => {
-          const tag = (t.grade || '').toUpperCase() || 'S';
-          const metaParts = [];
-          if (t.carNo) metaParts.push(`車號:${safeText(t.carNo)}`);
-          if (t.owner) metaParts.push(`貨主:${safeText(t.owner)}`);
-          if (t.note) metaParts.push(`備註:${safeText(t.note)}`);
-          const sub = metaParts.join(' ｜ ');
-
-          const task = document.createElement('div');
-          task.className = 'task';
-          task.innerHTML = `
-            <div class="tag ${gradeClass(tag)}">${tag}</div>
-            <div class="route">
-              <div class="main">${safeText(t.pickup)} → ${safeText(t.dropoff)}</div>
-              <div class="sub">${sub || ''}</div>
-            </div>
-            <div class="boards">${num(t.boards)} 版</div>
-          `;
-          listEl.appendChild(task);
-        });
-
-        body.appendChild(box);
-      });
-
-      det.appendChild(body);
-      container.appendChild(det);
+    d.items.push({
+      pickup: r.pickup || "",
+      dropoff: r.dropoff || "",
+      dropLabel: r.receiver || "",
+      receiver: r.receiver || "",
+      pickupAddr: r.dropoff || "",      // ✅ 區配提貨地點顯示 F
+      recvAddr: r.areaDropAddr || "",
+      seq: (r.areaSeq === null || r.areaSeq === undefined) ? null : Number(r.areaSeq),
+      grade: r.grade || "S",
+      boards: Number(r.boards || 0),
+      owner: r.owner || "",
+      carNo: r.carNo || "",
+      note: r.note || ""
     });
   }
 
-  // ===== Area Drivers (render) =====
-  function groupAreaItemsByPickup(items){
-    const m = new Map();
-    (items || []).forEach(t => {
-      const k = safeText(t.pickup); // E
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(t);
-    });
-
-    return Array.from(m.entries()).map(([pickup, list]) => {
-      const previewTo = uniq(list.map(x => {
-        const lbl = cleanReceiverLabel(x.dropLabel) || cleanReceiverLabel(x.receiver) || cleanReceiverLabel(x.dropoff);
-        return lbl || '(未填收件人)';
-      }));
-      const toLine = previewTo.slice(0,3).join(' / ') + (previewTo.length>3 ? ' …' : '');
-      return {
-        pickup,
-        toLine: toLine || '',
-        subtotal: list.reduce((s,x)=>s+num(x.boards),0),
-        list
-      };
-    }).sort((a,b)=>b.subtotal-a.subtotal);
-  }
-
-  function renderAreaDrivers(container, drivers) {
-    container.innerHTML = '';
-    if (!drivers || drivers.length === 0) return;
-
-    // ✅ 若 Code.gs 有 driverSeq，照 seq 排；否則 totalBoards
-    const list = (drivers || []).slice().sort((a,b)=>{
-      const sa = (a.driverSeq==null)?999999:Number(a.driverSeq);
-      const sb = (b.driverSeq==null)?999999:Number(b.driverSeq);
-      if (sa !== sb) return sa - sb;
-      return num(b.totalBoards) - num(a.totalBoards);
-    });
-
-    list.forEach(d => {
-      const det = document.createElement('details');
-      det.className = 'driverAcc';
-
-      const groups = groupAreaItemsByPickup(d.items || []);
-      const preview = groups.slice(0,3).map(g => `${g.pickup} > ${g.toLine}`).join(' ｜ ');
-
-      const sum = document.createElement('summary');
-      sum.innerHTML = `
-        <div class="driverTop">
-          <div class="driverName">🟣 ${displayNameNoDigits(d.driver)}</div>
-          <div class="driverPreview">${preview || ''}</div>
-        </div>
-        <div class="chips">
-          <div class="chip">筆數：${num(d.count)}</div>
-          <div class="chip">總版數：${num(d.totalBoards)}</div>
-        </div>
-      `;
-      det.appendChild(sum);
-
-      const body = document.createElement('div');
-      body.className = 'driverBody';
-
-      groups.forEach(g => {
-        const box = document.createElement('div');
-        box.className = 'routeGroup';
-
-        box.innerHTML = `
-          <div class="routeGroupTitle">
-            <div class="t">${safeText(g.pickup)}  &nbsp;>&nbsp;  ${safeText(g.toLine)}</div>
-            <div class="n">${num(g.subtotal)} 版</div>
-          </div>
-          <div class="routeGroupList"></div>
-        `;
-
-        const listEl = box.querySelector('.routeGroupList');
-
-        // 區配：依 seq 排序（沒有 seq 放最後）
-        const listSorted = (g.list || []).slice().sort((a,b)=>{
-          const sa = (a.seq === null || a.seq === undefined) ? 999999 : Number(a.seq);
-          const sb = (b.seq === null || b.seq === undefined) ? 999999 : Number(b.seq);
-          if (sa !== sb) return sa - sb;
-          return num(b.boards) - num(a.boards);
-        });
-
-        listSorted.forEach(t => {
-          const tag = (safeText(t.grade).toUpperCase() || 'S');
-          const metaParts = [];
-          if (t.owner) metaParts.push(`貨主:${safeText(t.owner)}`);
-          if (t.note)  metaParts.push(`備註:${safeText(t.note)}`);
-          const sub = metaParts.join(' ｜ ');
-
-          const recv = cleanReceiverLabel(t.receiver) || cleanReceiverLabel(t.dropLabel) || cleanReceiverLabel(t.dropoff) || '(未填收件人)';
-          const seqTxt = (t.seq !== null && t.seq !== undefined) ? `順序 ${t.seq}：` : '';
-          const mainLine = `${seqTxt}${safeText(t.pickup)} → ${recv}`;
-
-          const task = document.createElement('details');
-          task.className = 'taskAcc';
-
-          task.innerHTML = `
-            <summary class="areaTaskSummary">
-              <div class="tag ${gradeClass(tag)}">${tag}</div>
-              <div class="route">
-                <div class="main">${mainLine}</div>
-                <div class="sub">${sub || ''}</div>
-              </div>
-              <div class="boards">${num(t.boards)} 版</div>
-            </summary>
-
-            <div class="accBody areaAddr" style="padding:10px;border-top:1px solid rgba(255,255,255,.08);">
-              <div class="miniRow">
-                <div class="miniLeft">
-                  <div class="miniTitle">📍 區配提貨地點（F）</div>
-                  <div class="miniSub">${safeText(t.pickupAddr || '')}</div>
-                </div>
-              </div>
-
-              <div class="miniRow">
-                <div class="miniLeft">
-                  <div class="miniTitle">🏁 收件人地址（I）</div>
-                  <div class="miniSub">${safeText(t.recvAddr || '')}</div>
-                </div>
-              </div>
-            </div>
-          `;
-          listEl.appendChild(task);
-        });
-
-        body.appendChild(box);
-      });
-
-      det.appendChild(body);
-      container.appendChild(det);
+  const result = [];
+  for (const [driver, d] of driverMap.entries()) {
+    const totalBoards = (d.items || []).reduce((s, x) => s + Number(x.boards || 0), 0);
+    result.push({
+      driver: cleanDriverDisplay_(driver),
+      count: (d.items || []).length,
+      totalBoards,
+      items: d.items || []
     });
   }
 
-  // ===== 把 areaDrivers 拆成 北/中/雲/南 四區（依 F 到貨倉判斷） =====
-  function splitAreaDriversByZone(areaDrivers, whMap){
-    const out = { north: [], mid: [], yun: [], south: [] };
+  result.sort((a, b) => Number(b.totalBoards) - Number(a.totalBoards));
+  return result;
+}
 
-    (areaDrivers || []).forEach(d => {
-      const items = d.items || [];
+// ===========================
+// Totals (Index KPI 用)
+// ===========================
+function buildTotals_(pickupToDropAll, rows) {
+  const whMap = getWarehouseRegionMap_();
 
-      const buckets = { north: [], mid: [], yun: [], south: [] };
+  const totalBoards = (pickupToDropAll || []).reduce((s, x) => s + Number(x.subtotal || 0), 0);
 
-      items.forEach(it => {
-        // ✅ 依你 Code.gs：pickupAddr 會塞 F（到貨倉），抓它判斷區域
-        const ref = safeText(it.pickupAddr || it.dropoff || '');
-        const r = regionByMap(ref, whMap);
+  let transferTotal = 0;
+  let localTotal = 0;
 
-        if (r === '北') buckets.north.push(it);
-        else if (r === '中') buckets.mid.push(it);
-        else if (r === '雲') buckets.yun.push(it);
-        else if (r === '南') buckets.south.push(it);
-      });
+  // 北上/南下（看 E 區域）
+  let north = 0; // 北上
+  let south = 0; // 南下
 
-      function pushIfAny(key, list){
-        if (!list.length) return;
-        const totalBoards = list.reduce((s,x)=>s+num(x.boards),0);
-        out[key].push({
-          driver: d.driver,
-          driverSeq: d.driverSeq ?? null,
-          count: list.length,
-          totalBoards,
-          items: list
-        });
-      }
+  // 區配四類（看 F 區域）
+  let areaNorth = 0; // 北區配
+  let areaMid   = 0; // 中區配
+  let areaYun   = 0; // 雲區配
+  let areaSouth = 0; // 南區配
 
-      pushIfAny('north', buckets.north);
-      pushIfAny('mid', buckets.mid);
-      pushIfAny('yun', buckets.yun);
-      pushIfAny('south', buckets.south);
-    });
+  let unknown = 0;
 
-    // 每區內排序（先看 driverSeq，沒有就 totalBoards）
-    for (const k of ['north','mid','yun','south']){
-      out[k].sort((a,b)=>{
-        const sa = (a.driverSeq==null)?999999:Number(a.driverSeq);
-        const sb = (b.driverSeq==null)?999999:Number(b.driverSeq);
-        if (sa !== sb) return sa - sb;
-        return num(b.totalBoards) - num(a.totalBoards);
-      });
+  (rows || []).forEach(r => {
+    const b = Number(r.boards || 0);
+
+    if (r.transferDriver) transferTotal += b;
+
+    if (r.areaDriver) {
+      localTotal += b;
+
+      const toR = regionOfWarehouse_(r.dropoff, whMap); // F
+      if (toR === "北") areaNorth += b;
+      else if (toR === "中") areaMid += b;
+      else if (toR === "雲") areaYun += b;
+      else if (toR === "南") areaSouth += b;
     }
 
-    return out;
-  }
+    const fromR = regionOfWarehouse_(r.pickup, whMap); // E
+    if (fromR === "北") south += b; // 北出發 -> 南下
+    else if (fromR === "南" || fromR === "中" || fromR === "雲") north += b; // 南/中/雲出發 -> 北上
+    else unknown += b;
+  });
 
-  // =========================
-  // Global details toggle guard（最終保險）
-  // =========================
-  function installDetailsClickGuard(){
-    document.addEventListener('click', (ev) => {
-      const sum = ev.target.closest && ev.target.closest('summary');
-      if (!sum) return;
+  return {
+    totalBoards,
+    north,
+    south,
+    area: localTotal,
+    unknown: Math.max(0, totalBoards - (north + south)), // 依你現規則：E 能判斷就不算 unknown
+    transferTotal,
+    localTotal,
+    areaNorth,
+    areaMid,
+    areaYun,
+    areaSouth
+  };
+}
 
-      const det = sum.parentElement;
-      if (!det || det.tagName !== 'DETAILS') return;
-
-      // ✅ 強制切換 open
-      ev.preventDefault();
-      ev.stopPropagation();
-      det.open = !det.open;
-    }, true); // capture
-  }
-
-  // =========================
-  // Load tabs & daily
-  // =========================
-  function loadTabsThenDefault() {
-    setLoading(true);
-    google.script.run
-      .withSuccessHandler((tabs) => {
-        const sel = el('dateSelect');
-        sel.innerHTML = '';
-        (tabs || []).forEach(name => {
-          const opt = document.createElement('option');
-          opt.value = name;
-          opt.textContent = name;
-          sel.appendChild(opt);
-        });
-        if (sel.options.length > 0) sel.selectedIndex = sel.options.length - 1;
-
-        setLoading(false);
-        loadDaily();
-      })
-      .withFailureHandler((err) => {
-        setLoading(false);
-        el('subtitle').textContent = '讀取分頁失敗：' + (err?.message || err);
-      })
-      .getDateTabs();
-  }
-
-  function loadDaily() {
-    const date = el('dateSelect').value;
-    if (!date) return;
-
-    setLoading(true);
-    google.script.run
-      .withSuccessHandler((data) => {
-        setLoading(false);
-        el('subtitle').textContent = `📅 今日車趟：${data.date}`;
-
-        const pivot = (data.block1.pickupToDropAll || []);
-        el('noAnnounce').style.display = pivot.length ? 'none' : 'block';
-        renderAnnounce(el('announce'), pivot);
-
-        const ownerByDir = buildOwnerByDir(pivot);
-        el('noKpi').style.display = 'none';
-        renderKpis(el('kpiStack'), data.totals, ownerByDir);
-
-        // Transfer
-        const tDrivers = (data.block2.transferDrivers || []);
-        el('noTransferDrivers').style.display = tDrivers.length ? 'none' : 'block';
-        renderTransferDrivers(el('transferDrivers'), tDrivers);
-
-        // Area -> 4 zones
-        const whMap = data.warehouseRegionMap || {};
-        const aDrivers = (data.block2.areaDrivers || []);
-        const zones = splitAreaDriversByZone(aDrivers, whMap);
-
-        el('noAreaNorthDrivers').style.display = zones.north.length ? 'none' : 'block';
-        el('noAreaMidDrivers').style.display   = zones.mid.length ? 'none' : 'block';
-        el('noAreaYunDrivers').style.display   = zones.yun.length ? 'none' : 'block';
-        el('noAreaSouthDrivers').style.display = zones.south.length ? 'none' : 'block';
-
-        renderAreaDrivers(el('areaNorthDrivers'), zones.north);
-        renderAreaDrivers(el('areaMidDrivers'),   zones.mid);
-        renderAreaDrivers(el('areaYunDrivers'),   zones.yun);
-        renderAreaDrivers(el('areaSouthDrivers'), zones.south);
-      })
-      .withFailureHandler((err) => {
-        setLoading(false);
-        el('subtitle').textContent = '載入失敗：' + (err?.message || err);
-      })
-      .getDailyTrips(date);
-  }
-
-  el('btnLoad').addEventListener('click', loadDaily);
-  el('dateSelect').addEventListener('change', loadDaily);
-
-  // start
-  installDetailsClickGuard();
-  loadTabsThenDefault();
-</script>
-</body>
-</html>
 
