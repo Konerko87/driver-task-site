@@ -39,11 +39,18 @@
         </div>
       </div>
 
-      <!-- Drivers -->
+      <!-- Transfer Drivers -->
       <div class="card">
         <h2>🚚 轉運司機（收合看提貨>區域，點開看每條 E→F）</h2>
         <div class="driverGrid" id="transferDrivers"></div>
         <div class="empty" id="noTransferDrivers" style="display:none;">尚未填轉運司機姓名或今日無轉運司機資料</div>
+      </div>
+
+      <!-- Area Drivers -->
+      <div class="card">
+        <h2>🟣 區配司機（依姓名(區) 尾端數字排序：1→2→3…）</h2>
+        <div class="driverGrid" id="areaDrivers"></div>
+        <div class="empty" id="noAreaDrivers" style="display:none;">尚未填區配司機姓名或今日無區配司機資料</div>
       </div>
     </div>
   </div>
@@ -62,6 +69,11 @@
     if (g === 'H') return 'h';
     if (g === 'S') return 's';
     return 'n';
+  }
+
+  // ✅ 司機名字顯示：忽略數字（含全形）
+  function displayName(name){
+    return safeText(name).trim().replace(/[0-9０-９]/g,'').trim();
   }
 
   // region helpers
@@ -248,7 +260,7 @@
     container.appendChild(makeKpiAcc('🧩 區配總量（版）', totals.localTotal, '（總量資訊）', []));
   }
 
-  // ===== Drivers helpers =====
+  // ===== Transfer Drivers helpers =====
   function groupDriverItemsByPickup(items){
     const m = new Map();
     (items || []).forEach(t => {
@@ -270,7 +282,7 @@
     }).sort((a,b)=>b.subtotal-a.subtotal);
   }
 
-  // ✅ 新增：同一個「提貨→到貨」合併
+  // ✅ 轉運：同一個「提貨→到貨」合併
   function mergeSameRoute(list){
     const map = new Map();
     (list || []).forEach(t => {
@@ -294,7 +306,7 @@
       g.boards += num(t.boards);
 
       const tg = (safeText(t.grade).toUpperCase() || 'S');
-      if (tg === 'H') g.grade = 'H'; // 只要有 H 就升級 H
+      if (tg === 'H') g.grade = 'H';
 
       const carNo = safeText(t.carNo).trim();
       if (carNo) g.carNos.add(carNo);
@@ -334,7 +346,7 @@
       const sum = document.createElement('summary');
       sum.innerHTML = `
         <div class="driverTop">
-          <div class="driverName">🚚 ${safeText(d.driver)}</div>
+          <div class="driverName">🚚 ${displayName(d.driver)}</div>
           <div class="driverPreview">${preview || ''}</div>
         </div>
         <div class="chips">
@@ -360,8 +372,6 @@
         `;
 
         const listEl = box.querySelector('.routeGroupList');
-
-        // ✅ 這裡改：同點合併後再渲染
         const mergedList = mergeSameRoute(g.list || []);
 
         (mergedList || []).forEach(t => {
@@ -386,6 +396,78 @@
         });
 
         body.appendChild(box);
+      });
+
+      det.appendChild(body);
+      container.appendChild(det);
+    });
+  }
+
+  // ===== Area Drivers（區配）=====
+  function renderAreaDrivers(container, drivers){
+    container.innerHTML = '';
+    if (!drivers || drivers.length === 0) return;
+
+    drivers.forEach(d=>{
+      const det = document.createElement('details');
+      det.className = 'driverAcc';
+
+      // preview：前 3 筆 (順序+收件人地址)
+      const preview = (d.items || []).slice(0,3)
+        .map(x => `#${safeText(x.seq ?? '')} ${safeText(x.dropoff)}`.trim())
+        .join(' ｜ ');
+
+      const sum = document.createElement('summary');
+      sum.innerHTML = `
+        <div class="driverTop">
+          <div class="driverName">🟣 ${displayName(d.driver)}</div>
+          <div class="driverPreview">${preview || ''}</div>
+        </div>
+        <div class="chips">
+          <div class="chip">件數：${num(d.count)}</div>
+          <div class="chip">總版數：${num(d.totalBoards)}</div>
+        </div>
+      `;
+      det.appendChild(sum);
+
+      const body = document.createElement('div');
+      body.className = 'driverBody';
+
+      // 區配：依順序列表
+      (d.items || []).forEach((t, idx)=>{
+        const tag = (t.grade || '').toUpperCase() || 'S';
+        const seq = (t.seq !== null && t.seq !== undefined && isFinite(Number(t.seq))) ? Number(t.seq) : (idx + 1);
+
+        const metaParts = [];
+        if (t.carNo) metaParts.push(`車號:${safeText(t.carNo)}`);
+        if (t.owner) metaParts.push(`貨主:${safeText(t.owner)}`);
+        if (t.receiver) metaParts.push(`收件人:${safeText(t.receiver)}`);
+        if (t.orderNo) metaParts.push(`訂單:${safeText(t.orderNo)}`);
+        const sub = metaParts.join(' ｜ ');
+
+        const task = document.createElement('div');
+        task.className = 'task';
+        task.innerHTML = `
+          <div class="tag ${gradeClass(tag)}">${tag}</div>
+          <div class="route">
+            <div class="main">順序 ${seq}：${safeText(t.pickup)} → ${safeText(t.dropoff)}</div>
+            <div class="sub">${sub || ''}</div>
+          </div>
+          <div class="boards">${num(t.boards)} 版</div>
+        `;
+        body.appendChild(task);
+
+        if (t.note){
+          const note = document.createElement('div');
+          note.className = 'miniRow';
+          note.innerHTML = `
+            <div class="miniLeft">
+              <div class="miniTitle">📝 備註：${safeText(t.note)}</div>
+            </div>
+            <div class="miniNum"></div>
+          `;
+          body.appendChild(note);
+        }
       });
 
       det.appendChild(body);
@@ -435,9 +517,13 @@
         el('noKpi').style.display = 'none';
         renderKpis(el('kpiStack'), data.totals, ownerByDir);
 
-        const drivers = (data.block2.transferDrivers || []);
-        el('noTransferDrivers').style.display = drivers.length ? 'none' : 'block';
-        renderTransferDrivers(el('transferDrivers'), drivers);
+        const transfer = (data.block2.transferDrivers || []);
+        el('noTransferDrivers').style.display = transfer.length ? 'none' : 'block';
+        renderTransferDrivers(el('transferDrivers'), transfer);
+
+        const area = (data.block2.areaDrivers || []);
+        el('noAreaDrivers').style.display = area.length ? 'none' : 'block';
+        renderAreaDrivers(el('areaDrivers'), area);
       })
       .withFailureHandler((err) => {
         setLoading(false);
@@ -453,3 +539,4 @@
 </script>
 </body>
 </html>
+
