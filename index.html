@@ -4,8 +4,22 @@
   <base target="_top">
   <?!= include('Styles'); ?>
 
-  <!-- ✅ UI 修正：不改 Styles 檔也能救爆版 -->
   <style>
+    /* =========================
+       0) 強制讓 details 可點可展開
+       ========================= */
+    /* 有些 Styles 會用 pseudo/overlay 蓋住點擊，這裡硬救 */
+    details, summary { position: relative; }
+    summary { z-index: 50; pointer-events: auto !important; }
+    details > * { pointer-events: auto; }
+    .accBody, .driverBody { position: relative; z-index: 10; }
+
+    /* 如果 Styles 有卡片邊框的 :before/:after 蓋住 */
+    .card::before, .card::after,
+    .topbar::before, .topbar::after{
+      pointer-events: none !important;
+    }
+
     /* ===== FIX: 區配 UI 爆版（字變直排） ===== */
     .driverAcc summary,
     .kpiAcc summary,
@@ -67,6 +81,44 @@
       word-break:break-word;
       line-height:1.35;
     }
+
+    /* ✅ FIX: 區配每筆用 details 時，不要吃到 .task 的 grid 規則 */
+    .taskAcc{
+      display:block;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(255,255,255,.03);
+      border-radius:12px;
+      overflow:hidden;
+    }
+    .taskAcc summary{
+      padding:8px 10px;
+      display:grid;
+      grid-template-columns:56px 1fr 70px;
+      gap:8px;
+      align-items:center;
+    }
+    .taskAcc summary .route{min-width:0;}
+    .taskAcc summary .route .main{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .taskAcc summary .route .sub{
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    /* 4 區配板塊標題顏色微調（可有可無） */
+    .zoneTitle { display:flex; align-items:center; gap:8px; }
+    .zonePill {
+      border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:12px;
+      opacity:.92;
+    }
   </style>
 </head>
 
@@ -112,12 +164,31 @@
         <div class="empty" id="noTransferDrivers" style="display:none;">尚未填轉運司機姓名或今日無轉運司機資料</div>
       </div>
 
-      <!-- Area Drivers -->
+      <!-- Area 4 zones -->
       <div class="card">
-        <h2>🟣 區配司機（收合看提貨>收件人，點開看地址 H/I）</h2>
-        <div class="driverGrid" id="areaDrivers"></div>
-        <div class="empty" id="noAreaDrivers" style="display:none;">今日無區配司機資料</div>
+        <h2 class="zoneTitle">🟣 北區配 <span class="zonePill">依 F 到貨倉區域</span></h2>
+        <div class="driverGrid" id="areaNorthDrivers"></div>
+        <div class="empty" id="noAreaNorthDrivers" style="display:none;">今日無北區配資料</div>
       </div>
+
+      <div class="card">
+        <h2 class="zoneTitle">🟣 中區配 <span class="zonePill">依 F 到貨倉區域</span></h2>
+        <div class="driverGrid" id="areaMidDrivers"></div>
+        <div class="empty" id="noAreaMidDrivers" style="display:none;">今日無中區配資料</div>
+      </div>
+
+      <div class="card">
+        <h2 class="zoneTitle">🟣 雲區配 <span class="zonePill">依 F 到貨倉區域</span></h2>
+        <div class="driverGrid" id="areaYunDrivers"></div>
+        <div class="empty" id="noAreaYunDrivers" style="display:none;">今日無雲區配資料</div>
+      </div>
+
+      <div class="card">
+        <h2 class="zoneTitle">🟣 南區配 <span class="zonePill">依 F 到貨倉區域</span></h2>
+        <div class="driverGrid" id="areaSouthDrivers"></div>
+        <div class="empty" id="noAreaSouthDrivers" style="display:none;">今日無南區配資料</div>
+      </div>
+
     </div>
   </div>
 
@@ -146,18 +217,47 @@
   function cleanReceiverLabel(v){
     const s = safeText(v).trim();
     if (!s) return '';
-    if (s.startsWith('#')) return '';         // #999999 類型直接當空
+    if (s.startsWith('#')) return '';
     if (s === '999999') return '';
     return s;
   }
 
-  // region helpers
+  // ===== 倉別對照 map helpers（前端也做一份，防止資料怪） =====
+  function normalizeWarehouseKey(s){
+    return safeText(s).trim().replace(/\s+/g,'').toLowerCase();
+  }
+
+  function regionByMap(raw, map){
+    const s = safeText(raw).trim();
+    if (!s) return '不明';
+
+    const key = normalizeWarehouseKey(s);
+    if (map && map[key]) return map[key];
+
+    // fuzzy includes
+    if (map) {
+      for (const k in map){
+        if (!k) continue;
+        if (key.includes(k)) return map[k];
+      }
+    }
+
+    // fallback
+    if (s.includes('北')) return '北';
+    if (s.includes('中')) return '中';
+    if (s.includes('雲')) return '雲';
+    if (s.includes('南')) return '南';
+    return '不明';
+  }
+
+  // region helpers（右上公告目前仍用 dropoff 字串判斷）
   function regionOf(s){
     const v = safeText(s).trim();
     if (!v) return '不明';
     if (v.includes('北')) return '北';
     if (v.includes('南')) return '南';
     if (v.includes('中')) return '中';
+    if (v.includes('雲')) return '雲';
     return '不明';
   }
 
@@ -264,12 +364,13 @@
     const dirs = { north:new Map(), south:new Map(), local:new Map(), unknown:new Map() };
 
     (pivotArr || []).forEach(g => {
+      // 這段沿用你原本的方向判斷（之後你若要改成倉別對照再做）
       const from = regionOf(g.pickup);
       const toRegions = uniq((g.items || []).map(x => regionOf(x.dropoff)));
 
       let bucket = 'unknown';
-      if (from === '北' && (toRegions.includes('南') || toRegions.includes('中'))) bucket = 'south';
-      else if (from === '南' && (toRegions.includes('北') || toRegions.includes('中'))) bucket = 'north';
+      if (from === '北' && (toRegions.includes('南') || toRegions.includes('中') || toRegions.includes('雲'))) bucket = 'south';
+      else if ((from === '南' || from === '中' || from === '雲') && (toRegions.includes('北'))) bucket = 'north';
       else if (from !== '不明' && toRegions.length === 1 && toRegions[0] === from) bucket = 'local';
       else bucket = 'unknown';
 
@@ -326,16 +427,26 @@
 
   function renderKpis(container, totals, ownerByDir){
     container.innerHTML = '';
-    container.appendChild(makeKpiAcc('📦 公告總量（版）', totals.totalBoards, `北上:${num(totals.north)}｜南下:${num(totals.south)}｜區配:${num(totals.localTotal)}`, []));
+
+    // 你最新需求要把「區域配送」拆四個 KPI
+    const hintTotal = `北上:${num(totals.north)}｜南下:${num(totals.south)}｜區配:${num(totals.localTotal)}`;
+
+    container.appendChild(makeKpiAcc('📦 公告總量（版）', totals.totalBoards, hintTotal, []));
     container.appendChild(makeKpiAcc('⬆ 北上（版）', totals.north, '點開看：北上貨主 → 幾版', ownerByDir.north));
     container.appendChild(makeKpiAcc('⬇ 南下（版）', totals.south, '點開看：南下貨主 → 幾版', ownerByDir.south));
-    container.appendChild(makeKpiAcc('🟣 區域配送（版）', totals.area, '點開看：區域配送貨主 → 幾版', ownerByDir.local));
+
+    // ✅ 4 區配 KPI（若 Code.gs 有回傳 areaNorth/areaMid/areaYun/areaSouth 就會顯示正確）
+    container.appendChild(makeKpiAcc('🟣 北區配（版）', totals.areaNorth || 0, '點開看：北區配貨主 → 幾版', []));
+    container.appendChild(makeKpiAcc('🟣 中區配（版）', totals.areaMid || 0, '點開看：中區配貨主 → 幾版', []));
+    container.appendChild(makeKpiAcc('🟣 雲區配（版）', totals.areaYun || 0, '點開看：雲區配貨主 → 幾版', []));
+    container.appendChild(makeKpiAcc('🟣 南區配（版）', totals.areaSouth || 0, '點開看：南區配貨主 → 幾版', []));
+
     container.appendChild(makeKpiAcc('⚪ 無法判斷（版）', totals.unknown, '點開看：不明貨主 → 幾版', ownerByDir.unknown));
     container.appendChild(makeKpiAcc('🚛 轉運總量（版）', totals.transferTotal, '（總量資訊）', []));
     container.appendChild(makeKpiAcc('🧩 區配總量（版）', totals.localTotal, '（總量資訊）', []));
   }
 
-  // ===== Transfer Drivers (existing) =====
+  // ===== Transfer Drivers =====
   function groupDriverItemsByPickup(items){
     const m = new Map();
     (items || []).forEach(t => {
@@ -410,7 +521,15 @@
     container.innerHTML = '';
     if (!drivers || drivers.length === 0) return;
 
-    drivers.forEach(d => {
+    // ✅ 若 Code.gs 有回傳 driverSeq，就照 seq 排；否則照 totalBoards
+    const list = (drivers || []).slice().sort((a,b)=>{
+      const sa = (a.driverSeq==null)?999999:Number(a.driverSeq);
+      const sb = (b.driverSeq==null)?999999:Number(b.driverSeq);
+      if (sa !== sb) return sa - sb;
+      return num(b.totalBoards) - num(a.totalBoards);
+    });
+
+    list.forEach(d => {
       const det = document.createElement('details');
       det.className = 'driverAcc';
 
@@ -477,11 +596,11 @@
     });
   }
 
-  // ===== Area Drivers (fixed UI/UX) =====
+  // ===== Area Drivers (render) =====
   function groupAreaItemsByPickup(items){
     const m = new Map();
     (items || []).forEach(t => {
-      const k = safeText(t.pickup);
+      const k = safeText(t.pickup); // E
       if (!m.has(k)) m.set(k, []);
       m.get(k).push(t);
     });
@@ -505,7 +624,15 @@
     container.innerHTML = '';
     if (!drivers || drivers.length === 0) return;
 
-    drivers.forEach(d => {
+    // ✅ 若 Code.gs 有 driverSeq，照 seq 排；否則 totalBoards
+    const list = (drivers || []).slice().sort((a,b)=>{
+      const sa = (a.driverSeq==null)?999999:Number(a.driverSeq);
+      const sb = (b.driverSeq==null)?999999:Number(b.driverSeq);
+      if (sa !== sb) return sa - sb;
+      return num(b.totalBoards) - num(a.totalBoards);
+    });
+
+    list.forEach(d => {
       const det = document.createElement('details');
       det.className = 'driverAcc';
 
@@ -515,7 +642,7 @@
       const sum = document.createElement('summary');
       sum.innerHTML = `
         <div class="driverTop">
-          <div class="driverName">🟣 ${displayNameNoDigits(d.driver)} 區配</div>
+          <div class="driverName">🟣 ${displayNameNoDigits(d.driver)}</div>
           <div class="driverPreview">${preview || ''}</div>
         </div>
         <div class="chips">
@@ -557,18 +684,15 @@
           if (t.note)  metaParts.push(`備註:${safeText(t.note)}`);
           const sub = metaParts.join(' ｜ ');
 
-          // ✅ 主行：E → K（收件人），不顯示地址
           const recv = cleanReceiverLabel(t.receiver) || cleanReceiverLabel(t.dropLabel) || cleanReceiverLabel(t.dropoff) || '(未填收件人)';
           const seqTxt = (t.seq !== null && t.seq !== undefined) ? `順序 ${t.seq}：` : '';
           const mainLine = `${seqTxt}${safeText(t.pickup)} → ${recv}`;
 
           const task = document.createElement('details');
-          task.className = 'task';
-          task.style.padding = '0';
-          task.style.overflow = 'hidden';
+          task.className = 'taskAcc';
 
           task.innerHTML = `
-            <summary class="areaTaskSummary" style="padding:8px 10px;display:grid;grid-template-columns:56px 1fr 70px;gap:8px;align-items:center;">
+            <summary class="areaTaskSummary">
               <div class="tag ${gradeClass(tag)}">${tag}</div>
               <div class="route">
                 <div class="main">${mainLine}</div>
@@ -580,7 +704,7 @@
             <div class="accBody areaAddr" style="padding:10px;border-top:1px solid rgba(255,255,255,.08);">
               <div class="miniRow">
                 <div class="miniLeft">
-                  <div class="miniTitle">📍 區配提貨地址（H）</div>
+                  <div class="miniTitle">📍 區配提貨地點（F）</div>
                   <div class="miniSub">${safeText(t.pickupAddr || '')}</div>
                 </div>
               </div>
@@ -604,6 +728,78 @@
     });
   }
 
+  // ===== 把 areaDrivers 拆成 北/中/雲/南 四區（依 F 到貨倉判斷） =====
+  function splitAreaDriversByZone(areaDrivers, whMap){
+    const out = { north: [], mid: [], yun: [], south: [] };
+
+    (areaDrivers || []).forEach(d => {
+      const items = d.items || [];
+
+      const buckets = { north: [], mid: [], yun: [], south: [] };
+
+      items.forEach(it => {
+        // ✅ 依你 Code.gs：pickupAddr 會塞 F（到貨倉），抓它判斷區域
+        const ref = safeText(it.pickupAddr || it.dropoff || '');
+        const r = regionByMap(ref, whMap);
+
+        if (r === '北') buckets.north.push(it);
+        else if (r === '中') buckets.mid.push(it);
+        else if (r === '雲') buckets.yun.push(it);
+        else if (r === '南') buckets.south.push(it);
+      });
+
+      function pushIfAny(key, list){
+        if (!list.length) return;
+        const totalBoards = list.reduce((s,x)=>s+num(x.boards),0);
+        out[key].push({
+          driver: d.driver,
+          driverSeq: d.driverSeq ?? null,
+          count: list.length,
+          totalBoards,
+          items: list
+        });
+      }
+
+      pushIfAny('north', buckets.north);
+      pushIfAny('mid', buckets.mid);
+      pushIfAny('yun', buckets.yun);
+      pushIfAny('south', buckets.south);
+    });
+
+    // 每區內排序（先看 driverSeq，沒有就 totalBoards）
+    for (const k of ['north','mid','yun','south']){
+      out[k].sort((a,b)=>{
+        const sa = (a.driverSeq==null)?999999:Number(a.driverSeq);
+        const sb = (b.driverSeq==null)?999999:Number(b.driverSeq);
+        if (sa !== sb) return sa - sb;
+        return num(b.totalBoards) - num(a.totalBoards);
+      });
+    }
+
+    return out;
+  }
+
+  // =========================
+  // Global details toggle guard（最終保險）
+  // =========================
+  function installDetailsClickGuard(){
+    document.addEventListener('click', (ev) => {
+      const sum = ev.target.closest && ev.target.closest('summary');
+      if (!sum) return;
+
+      const det = sum.parentElement;
+      if (!det || det.tagName !== 'DETAILS') return;
+
+      // ✅ 強制切換 open
+      ev.preventDefault();
+      ev.stopPropagation();
+      det.open = !det.open;
+    }, true); // capture
+  }
+
+  // =========================
+  // Load tabs & daily
+  // =========================
   function loadTabsThenDefault() {
     setLoading(true);
     google.script.run
@@ -651,10 +847,20 @@
         el('noTransferDrivers').style.display = tDrivers.length ? 'none' : 'block';
         renderTransferDrivers(el('transferDrivers'), tDrivers);
 
-        // Area
+        // Area -> 4 zones
+        const whMap = data.warehouseRegionMap || {};
         const aDrivers = (data.block2.areaDrivers || []);
-        el('noAreaDrivers').style.display = aDrivers.length ? 'none' : 'block';
-        renderAreaDrivers(el('areaDrivers'), aDrivers);
+        const zones = splitAreaDriversByZone(aDrivers, whMap);
+
+        el('noAreaNorthDrivers').style.display = zones.north.length ? 'none' : 'block';
+        el('noAreaMidDrivers').style.display   = zones.mid.length ? 'none' : 'block';
+        el('noAreaYunDrivers').style.display   = zones.yun.length ? 'none' : 'block';
+        el('noAreaSouthDrivers').style.display = zones.south.length ? 'none' : 'block';
+
+        renderAreaDrivers(el('areaNorthDrivers'), zones.north);
+        renderAreaDrivers(el('areaMidDrivers'),   zones.mid);
+        renderAreaDrivers(el('areaYunDrivers'),   zones.yun);
+        renderAreaDrivers(el('areaSouthDrivers'), zones.south);
       })
       .withFailureHandler((err) => {
         setLoading(false);
@@ -666,6 +872,8 @@
   el('btnLoad').addEventListener('click', loadDaily);
   el('dateSelect').addEventListener('change', loadDaily);
 
+  // start
+  installDetailsClickGuard();
   loadTabsThenDefault();
 </script>
 </body>
