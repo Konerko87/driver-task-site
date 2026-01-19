@@ -1,705 +1,746 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>司機任務</title>
+  <title>司機今日任務</title>
 
+  <!-- 可選：如果你有共用 Styles，也能抽出去；這裡我直接內嵌一份「司機版專用」 -->
   <style>
     :root{
-      --bg:#0b1220;
-      --card:rgba(255,255,255,.06);
-      --bd:rgba(255,255,255,.10);
-      --bd2:rgba(255,255,255,.14);
-      --txt:#e5e7eb;
-      --muted:#9ca3af;
-      --muted2:#6b7280;
-      --good:#34d399;
-      --warn:#fbbf24;
-      --bad:#fca5a5;
-      --chip:rgba(255,255,255,.10);
-      --chipbd:rgba(255,255,255,.14);
-      --btnbg:rgba(255,255,255,.10);
-      --btnbd:rgba(255,255,255,.16);
-      --focus:rgba(255,255,255,.28);
-      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --bg:#070A14;
+      --bg2:#0B1020;
+      --text:#EAF0FF;
+      --muted:rgba(234,240,255,.62);
+      --line:rgba(255,255,255,.10);
+      --line2:rgba(255,255,255,.06);
+      --shadow: 0 18px 45px rgba(0,0,0,.45);
+      --shadow2: 0 10px 24px rgba(0,0,0,.32);
+      --accent: rgba(198, 170, 110, .95);
+      --ice: rgba(140, 196, 255, .95);
+      --ok: rgba(120, 240, 180, .95);
+      --bad: rgba(255, 90, 90, .95);
     }
     *{box-sizing:border-box}
     body{
       margin:0;
-      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
-      background: radial-gradient(900px 600px at 20% 0%, rgba(59,130,246,.18), transparent 60%),
-                  radial-gradient(700px 500px at 80% 10%, rgba(34,197,94,.12), transparent 55%),
-                  var(--bg);
-      color:var(--txt);
+      font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
+      background:
+        radial-gradient(900px 520px at 18% 0%, rgba(76,112,255,.22) 0%, rgba(7,10,20,0) 55%),
+        radial-gradient(760px 460px at 88% 12%, rgba(198,170,110,.14) 0%, rgba(7,10,20,0) 58%),
+        radial-gradient(700px 520px at 50% 110%, rgba(140,196,255,.10) 0%, rgba(7,10,20,0) 60%),
+        linear-gradient(180deg, var(--bg2) 0%, var(--bg) 100%);
+      color:var(--text);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
-    .wrap{max-width:980px;margin:0 auto;padding:14px 14px 26px;}
-    .header{
-      display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;
-      padding:14px;border:1px solid var(--bd);background:var(--card);
-      border-radius:16px;box-shadow:var(--shadow);margin-bottom:12px;
+    .wrap{max-width:980px;margin:0 auto;padding:16px}
+    .topbar{
+      display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+      padding:14px;border:1px solid var(--line);border-radius:18px;
+      background:rgba(18,26,51,.65);
+      backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: var(--shadow2);
+      position:relative;
     }
-    .brand{flex:1;min-width:240px}
-    .title{font-size:18px;font-weight:900;letter-spacing:.2px;margin:0 0 4px}
-    .subtitle{font-size:13px;color:var(--muted);line-height:1.45}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .topbar:before{
+      content:"";
+      position:absolute; inset:-1px;
+      border-radius:19px;
+      padding:1px;
+      background: linear-gradient(120deg, rgba(198,170,110,.35), rgba(255,255,255,.10), rgba(140,196,255,.28));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events:none;
+      opacity:.75;
+    }
+    .brand{display:flex;flex-direction:column;gap:2px}
+    .brand .title{font-size:15px;margin:0;font-weight:900;letter-spacing:.2px}
+    .brand .sub{font-size:12px;color:var(--muted)}
+    .spacer{flex:1}
     .pill{
-      display:inline-flex;align-items:center;gap:8px;
-      background:var(--chip);border:1px solid var(--chipbd);
-      padding:6px 10px;border-radius:999px;font-size:13px;color:var(--txt);
+      border:1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.04) 100%);
+      border-radius:999px;
+      padding:8px 12px;
+      font-size:12px;
+      color: rgba(234,240,255,.92);
+      box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 10px 18px rgba(0,0,0,.22);
+      backdrop-filter: blur(10px);
       white-space:nowrap;
     }
-    .dot{width:8px;height:8px;border-radius:99px;background:var(--muted2)}
-    .dot.good{background:var(--good)}
-    .dot.warn{background:var(--warn)}
-    .dot.bad{background:var(--bad)}
-    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
-    label{font-size:12px;color:var(--muted)}
-    select, input{
-      background:rgba(255,255,255,.08);
-      border:1px solid var(--bd2);
-      color:var(--txt);
-      border-radius:12px;
-      padding:10px 12px;
-      font-size:14px;
+    .pill.ok{border-color: rgba(120,240,180,.25); background: rgba(120,240,180,.08);}
+    .pill.bad{border-color: rgba(255,90,90,.25); background: rgba(255,90,90,.08);}
+
+    select,button,input{
+      border-radius:12px;border:1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.04) 100%);
+      color:var(--text);
+      padding:10px 12px;font-size:14px;
       outline:none;
+      box-shadow: 0 1px 0 rgba(255,255,255,.12) inset, 0 10px 18px rgba(0,0,0,.22);
+      backdrop-filter: blur(10px);
+      transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
     }
-    select:focus, input:focus{border-color:var(--focus)}
-    button{
-      background:var(--btnbg);
-      border:1px solid var(--btnbd);
-      color:var(--txt);
-      border-radius:12px;
-      padding:10px 12px;
-      font-size:14px;
-      font-weight:700;
-      cursor:pointer;
+    select{padding-right:34px}
+    button{cursor:pointer;font-weight:900;letter-spacing:.2px}
+    button:hover, select:hover, input:hover{
+      border-color: rgba(255,255,255,.20);
+      box-shadow: 0 1px 0 rgba(255,255,255,.14) inset, 0 16px 26px rgba(0,0,0,.28);
+      transform: translateY(-1px);
     }
-    button:hover{filter:brightness(1.08)}
-    button:disabled{opacity:.6;cursor:not-allowed}
+    button:active,select:active,input:active{transform: translateY(0px)}
+    button:disabled{opacity:.55;cursor:not-allowed;transform:none}
 
-    .grid{
-      display:grid;
-      grid-template-columns: 1fr;
-      gap:12px;
-    }
+    .grid{display:flex;flex-direction:column;gap:14px;margin-top:14px}
     .card{
-      background:var(--card);
-      border:1px solid var(--bd);
-      border-radius:16px;
-      padding:14px;
-      box-shadow:var(--shadow);
+      border:1px solid var(--line);border-radius:18px;
+      background:rgba(18,26,51,.65);padding:14px;
+      backdrop-filter: blur(12px) saturate(140%);
+      box-shadow: var(--shadow);
+      position:relative;
     }
-    .card h2{
-      margin:0 0 10px;
-      font-size:16px;
-      font-weight:900;
-      letter-spacing:.2px;
-      display:flex;align-items:center;gap:8px;
+    .card:before{
+      content:"";
+      position:absolute; inset:-1px;
+      border-radius:19px;
+      padding:1px;
+      background: linear-gradient(120deg, rgba(140,196,255,.22), rgba(255,255,255,.08), rgba(198,170,110,.22));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events:none;
+      opacity:.55;
     }
-    .muted{color:var(--muted);font-size:13px;line-height:1.45}
-    .fine{color:var(--muted2);font-size:12px;line-height:1.45}
-    .empty{
-      padding:14px;border:1px dashed rgba(255,255,255,.18);
-      border-radius:14px;color:var(--muted);background:rgba(0,0,0,.18);
+    .card h2{font-size:14px;margin:0 0 10px;color:#cfe0ff;font-weight:900;letter-spacing:.2px}
+
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .hint{font-size:12px;color:var(--muted)}
+
+    details{border:1px solid var(--line2);border-radius:14px;background:rgba(255,255,255,.03);overflow:hidden}
+    details+details{margin-top:10px}
+    summary{
+      cursor:pointer;list-style:none;
+      display:flex;align-items:center;justify-content:space-between;
+      padding:12px 12px;
+      gap:10px;
+    }
+    summary::-webkit-details-marker{display:none}
+    .accBody{padding:10px;display:flex;flex-direction:column;gap:10px}
+
+    .driverHeader{
+      display:flex;flex-direction:column;gap:2px;
+    }
+    .driverName{font-size:16px;font-weight:900}
+    .driverMeta{font-size:12px;color:var(--muted)}
+    .chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .chip{
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.05);
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color: rgba(234,240,255,.92);
+      white-space:nowrap;
     }
 
-    details{
-      background:rgba(0,0,0,.22);
+    .routeGroup{
       border:1px solid rgba(255,255,255,.10);
-      border-radius:14px;
-      padding:10px 12px;
-      margin-top:10px;
-      overflow:hidden;
+      border-radius:14px;padding:10px;background:rgba(255,255,255,.03)
     }
-    summary{cursor:pointer;list-style:none;font-weight:900;outline:none}
-    summary::-webkit-details-marker{display:none}
-    .sumline{display:flex;align-items:center;justify-content:space-between;gap:10px}
-    .sumtitle{font-size:14px}
-    .sumright{font-size:13px;color:var(--muted)}
+    .routeGroupTitle{
+      display:flex;justify-content:space-between;gap:10px;
+      font-weight:900;margin-bottom:8px
+    }
+    .routeGroupTitle .t{font-weight:900}
+    .routeGroupTitle .n{font-weight:900;color:rgba(234,240,255,.95)}
+    .routeGroupList{display:flex;flex-direction:column;gap:8px}
 
     .task{
-      padding:10px 0;
-      border-bottom:1px solid rgba(255,255,255,.08);
+      display:grid;grid-template-columns:56px 1fr 70px;
+      gap:8px;align-items:center;
+      padding:8px 10px;border-radius:12px;
+      border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03)
     }
-    .task:last-child{border-bottom:0}
-    .taskTop{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-    .taskMain{font-size:14px;font-weight:900}
-    .taskMain .seq{
-      display:inline-block;
-      min-width:30px;
-      padding:3px 8px;
-      border-radius:999px;
-      background:rgba(59,130,246,.18);
-      border:1px solid rgba(59,130,246,.28);
-      font-size:12px;
-      font-weight:900;
-      color:#dbeafe;
-      margin-right:8px;
-      text-align:center;
-    }
-    .taskBoards{
-      font-weight:900;
-      font-size:14px;
+    .tag{font-weight:900;font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.10);text-align:center}
+    .tag.h{background:rgba(255,90,90,.22);border-color:rgba(255,90,90,.30)}
+    .tag.s{background:rgba(140,196,255,.18);border-color:rgba(140,196,255,.26)}
+    .tag.n{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.10)}
+    .route .main{font-weight:900}
+    .route .sub{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.35}
+    .boards{font-weight:900;text-align:right}
+
+    .badgeArea{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:4px 10px;border-radius:999px;
+      border:1px solid rgba(198,170,110,.28);
+      background: rgba(198,170,110,.10);
+      color: rgba(234,240,255,.95);
+      font-size:12px;font-weight:900;
+      margin-left:8px;
+      vertical-align:middle;
       white-space:nowrap;
-      color:#e8f2ff;
     }
-    .taskMeta{margin-top:4px;color:var(--muted);font-size:12px;line-height:1.45}
-    code{
-      background:rgba(255,255,255,.10);
+    .seq{
+      display:inline-flex;align-items:center;justify-content:center;
+      min-width:34px;padding:4px 8px;border-radius:999px;
+      border:1px solid rgba(140,196,255,.22);
+      background: rgba(140,196,255,.10);
+      font-weight:900;font-size:12px;
+      white-space:nowrap;
+    }
+
+    .empty{font-size:12px;color:var(--muted)}
+    .notice{
       border:1px solid rgba(255,255,255,.10);
-      padding:2px 6px;border-radius:8px;
-      word-break:break-all;
-    }
-
-    .tabs{
-      display:flex;gap:8px;flex-wrap:wrap;margin-top:8px
-    }
-    .tabBtn{
-      padding:8px 10px;border-radius:999px;font-size:13px;font-weight:900;
-      border:1px solid rgba(255,255,255,.14);
-      background:rgba(255,255,255,.08);
-      cursor:pointer;
-      user-select:none;
-    }
-    .tabBtn.active{
-      background:rgba(34,197,94,.18);
-      border-color:rgba(34,197,94,.30);
-    }
-
-    .bindBox{
-      margin-top:10px;
-      padding:12px;
-      border:1px dashed rgba(255,255,255,.18);
+      background: rgba(255,255,255,.04);
       border-radius:14px;
-      background:rgba(0,0,0,.18);
+      padding:12px;
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
     }
-    .bindRow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
-    .hintLine{margin-top:6px}
-    .right{margin-left:auto}
+    .notice .t{font-weight:900}
+    .notice .d{font-size:12px;color:var(--muted);line-height:1.45;margin-top:2px}
+
+    /* 地址長字串爆版保險 */
+    .route .main,.route .sub{
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+
+    .bindForm{
+      display:flex;flex-direction:column;gap:10px;
+      padding:12px;border-radius:16px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.03);
+    }
+    .bindRow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .bindRow input{flex:1;min-width:220px}
+    .small{font-size:12px;color:var(--muted);line-height:1.5}
+    .divider{height:1px;background:rgba(255,255,255,.10);margin:6px 0}
   </style>
 
+  <!-- LIFF SDK -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 
 <body>
-<div class="wrap">
-  <div class="header">
-    <div class="brand">
-      <div class="title">司機任務</div>
-      <div class="subtitle" id="subtitle">初始化中…</div>
+  <div class="wrap">
 
-      <div class="tabs" id="viewTabs" style="display:none;">
-        <div class="tabBtn active" data-tab="all">全部</div>
-        <div class="tabBtn" data-tab="transfer">轉運</div>
-        <div class="tabBtn" data-tab="area">區配</div>
+    <!-- Top -->
+    <div class="topbar">
+      <div class="brand">
+        <div class="title">司機今日任務</div>
+        <div class="sub" id="subtitle">初始化中…</div>
+      </div>
+      <div class="spacer"></div>
+
+      <div class="row" style="justify-content:flex-end">
+        <div class="pill" id="pillStatus">尚未登入</div>
       </div>
     </div>
 
-    <div class="controls">
-      <div class="row" id="topRow" style="display:none;">
-        <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">待命</span></div>
-        <div class="pill" id="pillDriver" style="display:none;"></div>
-        <div class="pill" id="pillToday" style="display:none;"></div>
+    <div class="grid">
 
-        <label class="right">日期</label>
-        <select id="dateSelect"></select>
-        <button id="refreshBtn" type="button">重新整理</button>
-      </div>
-    </div>
-
-    <details style="width:100%;" id="debugPanel">
-      <summary>
-        <div class="sumline">
-          <div class="sumtitle">Debug（管理員用）</div>
-          <div class="sumright">點開查看 userId / 錯誤細節</div>
+      <!-- Controls -->
+      <div class="card">
+        <h2>📅 日期</h2>
+        <div class="row">
+          <div class="hint">今天（台灣）：</div>
+          <div class="pill" id="todayPill">—</div>
+          <div class="spacer"></div>
+          <select id="dateSelect"></select>
+          <button id="btnReload">更新任務</button>
         </div>
-      </summary>
-      <div class="fine" id="debug"></div>
-    </details>
-  </div>
-
-  <!-- 綁定區塊（未綁定時才顯示） -->
-  <div class="card" id="bindCard" style="display:none;">
-    <h2>🔐 第一次使用：請綁定司機</h2>
-    <div class="muted">
-      系統需要把你的 LINE 身分綁定到司機姓名，之後就會自動顯示你的任務。
-    </div>
-
-    <div class="bindBox">
-      <div class="muted">
-        1) 請輸入你的司機姓名（對照 Excel 的「姓名(轉)」/「姓名(區)」）<br/>
-        2) 名稱後面的數字（例如 <code>5阿明1</code>）系統會自動忽略，不用刻意輸入
+        <div class="empty" id="controlHint" style="margin-top:10px;display:none;"></div>
       </div>
 
-      <div class="bindRow">
-        <input id="bindName" placeholder="例如：阿明 / 阿明1 / 5阿明1" style="min-width:240px;flex:1;" />
-        <button id="bindBtn" type="button">立即綁定</button>
+      <!-- Bind -->
+      <div class="card" id="bindCard" style="display:none;">
+        <h2>🔗 綁定司機</h2>
+        <div class="notice">
+          <div>🧾</div>
+          <div>
+            <div class="t">你的 LINE 尚未綁定司機</div>
+            <div class="d">請輸入姓名（對照表內的姓名）。系統會自動忽略尾巴數字（例如「阿明1」會視為「阿明」）。</div>
+          </div>
+        </div>
+
+        <div class="bindForm">
+          <div class="bindRow">
+            <input id="inpName" placeholder="輸入你的姓名（例如：王小明 / 阿明）" />
+            <button id="btnBind">立即綁定</button>
+          </div>
+          <div class="small" id="bindMsg"> </div>
+          <div class="divider"></div>
+          <div class="small">如果輸入後仍無法綁定，請聯絡管理員協助處理「同名多筆」或「已被其他 LINE 綁定」等狀況。</div>
+        </div>
       </div>
 
-      <div class="fine hintLine" id="bindHint"></div>
-    </div>
-  </div>
+      <!-- Tasks -->
+      <div class="card" id="taskCard" style="display:none;">
+        <h2>🚚 今日配送</h2>
 
-  <div class="grid" id="content">
-    <div class="card">
-      <h2>📌 提示</h2>
-      <div class="muted">
-        請稍候…正在讀取你的任務。
+        <details open class="driverAcc">
+          <summary>
+            <div class="driverHeader">
+              <div class="driverName" id="driverName">—</div>
+              <div class="driverMeta" id="driverMeta">—</div>
+            </div>
+            <div class="chips">
+              <div class="chip" id="chipCount">筆數：0</div>
+              <div class="chip" id="chipBoards">總版數：0</div>
+            </div>
+          </summary>
+          <div class="accBody" id="taskBody">
+            <div class="empty">載入中…</div>
+          </div>
+        </details>
+
+        <div class="empty" id="noTasks" style="display:none;">今日沒有你的任務</div>
       </div>
-    </div>
-  </div>
 
-  <div class="card">
-    <div class="muted">
-      若遇到問題，請把 Debug 裡的 <code>lineUserId</code> 提供給管理員。
+      <!-- Error -->
+      <div class="card" id="errorCard" style="display:none;">
+        <h2>⚠️ 提示</h2>
+        <div class="notice">
+          <div>ℹ️</div>
+          <div>
+            <div class="t" id="errorTitle">目前無法讀取任務</div>
+            <div class="d" id="errorDetail">—</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
-</div>
 
 <script>
-  // ===== 只要確認這兩行是你的 =====
+  // ====== CONFIG ======
   const LIFF_ID = "2008915809-vp9PFMVX";
   const GAS_EXEC_URL = "https://script.google.com/macros/s/AKfycbxY-cAz9uSlEo44YA7GAp6DYtAog3VTxLWWSAesQKiok2w2HxkOVOe_UnhNw5nV9K5C/exec";
 
-  let currentUserId = null;
-  let currentTabView = "all"; // all | transfer | area
+  // ====== utils ======
+  const el = (id) => document.getElementById(id);
+  const safeText = (v) => (v === null || v === undefined) ? "" : String(v);
+  const num = (v) => Number(v || 0);
 
-  const $ = (id)=>document.getElementById(id);
-
-  function setDot(type){
-    const dot = $("statusDot");
-    dot.className = "dot" + (type ? " " + type : "");
+  function setStatusPill(text, type){
+    const p = el("pillStatus");
+    p.textContent = text;
+    p.classList.remove("ok","bad");
+    if (type) p.classList.add(type);
   }
-  function setStatus(text, type){
-    $("statusText").textContent = text || "";
-    setDot(type || "");
-    $("subtitle").textContent = text || "";
-  }
+  function setSubtitle(text){ el("subtitle").textContent = text; }
 
-  function setDebug(html){ $("debug").innerHTML = html || ""; }
-
-  // ===== 名稱處理：忽視數字（含全形），用於比對與顯示 =====
-  function normalizeDriverName(name){
-    return String(name || "")
-      .trim()
-      .replace(/\s+/g,"")
-      .replace(/[0-9０-９]/g,"")
-      .toLowerCase();
+  // ✅ 忽略尾巴數字（顯示用）
+  function stripTrailingDigits(name){
+    return safeText(name).trim().replace(/[0-9０-９]+$/g, "");
   }
-  function prettyDriverName(name){
-    return String(name || "")
-      .trim()
-      .replace(/[0-9０-９]/g,"")
-      .replace(/\s+/g," ")
-      .trim();
+  // ✅ 取順序尾碼（區配用）
+  function trailingSeq(name){
+    const m = safeText(name).trim().match(/([0-9０-９]+)$/);
+    if (!m) return null;
+    const digits = m[1].replace(/[０-９]/g, d => String("０１２３４５６７８９".indexOf(d)));
+    const n = Number(digits);
+    return Number.isFinite(n) ? n : null;
   }
 
-  function esc(s){
-    return String(s ?? "")
-      .replace(/&/g,"&amp;")
-      .replace(/</g,"&lt;")
-      .replace(/>/g,"&gt;");
+  function gradeClass(g){
+    if (g === "H") return "h";
+    if (g === "S") return "s";
+    return "n";
   }
 
-  // ===== JSONP（解 CORS）=====
-  function jsonp(url){
-    return new Promise((resolve, reject) => {
-      const cbName = "cb_" + Math.random().toString(36).slice(2);
+  // JSONP
+  function jsonp(url, cbParam="callback"){
+    return new Promise((resolve, reject)=>{
+      const cbName = "__cb_" + Math.random().toString(36).slice(2);
       const script = document.createElement("script");
+      const sep = url.includes("?") ? "&" : "?";
+      script.src = url + sep + cbParam + "=" + cbName;
+      script.async = true;
 
-      window[cbName] = (data) => { cleanup(); resolve(data); };
+      const timer = setTimeout(()=>{
+        cleanup();
+        reject(new Error("連線逾時，請稍後再試"));
+      }, 12000);
 
       function cleanup(){
-        try { delete window[cbName]; } catch(e){ window[cbName] = undefined; }
-        if (script && script.parentNode) script.parentNode.removeChild(script);
+        clearTimeout(timer);
+        delete window[cbName];
+        script.remove();
       }
 
-      script.onerror = () => { cleanup(); reject(new Error("JSONP 載入失敗（GAS /exec 無回應或被阻擋）")); };
+      window[cbName] = (data)=>{
+        cleanup();
+        resolve(data);
+      };
 
-      const sep = url.includes("?") ? "&" : "?";
-      script.src = url + sep + "callback=" + encodeURIComponent(cbName);
-      document.head.appendChild(script);
+      script.onerror = ()=>{
+        cleanup();
+        reject(new Error("載入失敗，請確認網路或網址"));
+      };
+
+      document.body.appendChild(script);
     });
   }
 
-  function callApiJsonp({ uid, date }) {
-    const params = new URLSearchParams({
-      mode: "api_jsonp",
-      uid: uid || "",
-      date: date || ""
-    });
-    return jsonp(GAS_EXEC_URL + "?" + params.toString());
+  function showBind(show){
+    el("bindCard").style.display = show ? "block" : "none";
+  }
+  function showTasks(show){
+    el("taskCard").style.display = show ? "block" : "none";
+  }
+  function showError(show, title, detail){
+    el("errorCard").style.display = show ? "block" : "none";
+    if (title) el("errorTitle").textContent = title;
+    if (detail) el("errorDetail").textContent = detail;
   }
 
-  function callBindJsonp({ uid, driverName }) {
-    const params = new URLSearchParams({
-      mode: "bind_jsonp",
-      uid: uid || "",
-      driverName: driverName || ""
-    });
-    return jsonp(GAS_EXEC_URL + "?" + params.toString());
+  function setLoading(on){
+    el("btnReload").disabled = on;
+    el("btnReload").textContent = on ? "載入中…" : "更新任務";
+    el("btnBind").disabled = on;
+    el("btnBind").textContent = on ? "處理中…" : "立即綁定";
   }
 
-  // ===== 日期選單（五天）=====
-  function fillDateSelect(options, chosen){
-    const sel = $("dateSelect");
+  // ====== date select ======
+  function buildDateOptions(options){
+    const sel = el("dateSelect");
     sel.innerHTML = "";
 
-    // 只顯示存在的
-    const items = [];
-    if (options?.dMinus2) items.push({ label: `D-2（${options.dMinus2}）`, value: options.dMinus2 });
-    if (options?.dMinus1) items.push({ label: `D-1（${options.dMinus1}）`, value: options.dMinus1 });
-    if (options?.d)       items.push({ label: `D（${options.d}）`, value: options.d });
-    if (options?.dPlus1)  items.push({ label: `D+1（${options.dPlus1}）`, value: options.dPlus1 });
-    if (options?.dPlus2)  items.push({ label: `D+2（${options.dPlus2}）`, value: options.dPlus2 });
+    const map = [
+      ["dMinus2","D-2"],
+      ["dMinus1","D-1"],
+      ["d","D（預設）"],
+      ["dPlus1","D+1"],
+      ["dPlus2","D+2"]
+    ];
 
-    for (const it of items){
-      const opt = document.createElement("option");
-      opt.value = it.value;
-      opt.textContent = it.label;
-      if (it.value === chosen) opt.selected = true;
-      sel.appendChild(opt);
-    }
-
-    sel.onchange = () => fetchDaily(sel.value);
-  }
-
-  function showTopbar(driverName, chosenDate, baseToday){
-    $("topRow").style.display = "flex";
-
-    const pretty = prettyDriverName(driverName);
-    $("pillDriver").style.display = "inline-flex";
-    $("pillDriver").innerHTML = `👤 司機：<b>${esc(pretty)}</b>`;
-
-    $("pillToday").style.display = "inline-flex";
-    $("pillToday").innerHTML = `📅 今天：<b>${esc(baseToday || chosenDate)}</b>`;
-  }
-
-  // ===== Tabs（全部/轉運/區配）=====
-  function setupTabs(){
-    const tabs = $("viewTabs");
-    tabs.style.display = "flex";
-
-    tabs.querySelectorAll(".tabBtn").forEach(btn=>{
-      btn.onclick = ()=>{
-        tabs.querySelectorAll(".tabBtn").forEach(x=>x.classList.remove("active"));
-        btn.classList.add("active");
-        currentTabView = btn.dataset.tab || "all";
-        // 重新渲染：用最後一次的資料
-        if (window.__lastRender) window.__lastRender();
-      };
+    const avail = [];
+    map.forEach(([k,label])=>{
+      const tab = options ? options[k] : null;
+      if (!tab) return;
+      avail.push({tab,label});
     });
+
+    avail.forEach(x=>{
+      const opt = document.createElement("option");
+      opt.value = x.tab;
+      opt.textContent = `${x.label}　(${x.tab})`;
+      sel.appendChild(opt);
+    });
+
+    // 預設選 D（如果有）
+    if (options && options.d){
+      sel.value = options.d;
+    }
   }
 
-  // ===== 渲染：轉運 =====
-  function renderTransferSection(driverName, daily){
-    const transferDrivers = daily?.block2?.transferDrivers || [];
-    const target = normalizeDriverName(driverName);
+  // ====== render (Transfer + Area) ======
+  function renderTasks(payload){
+    const driverNameRaw = safeText(payload.driverName);
+    const driverName = stripTrailingDigits(driverNameRaw);
+    const chosenDate = safeText(payload.chosenDate);
 
-    // 找到此司機（忽略數字）
-    const d = transferDrivers.find(x => normalizeDriverName(x.driver) === target);
-    const items = d?.items || [];
+    el("driverName").textContent = `🚚 ${driverName}`;
+    el("driverMeta").textContent = `分頁：${chosenDate}`;
 
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `<h2>🚚 轉運任務</h2>`;
+    const daily = payload.daily || {};
+    const block2 = daily.block2 || {};
 
-    if (!items.length){
-      const div = document.createElement("div");
-      div.className = "empty";
-      div.textContent = "今天沒有轉運任務。";
-      card.appendChild(div);
-      return card;
+    const transferDrivers = block2.transferDrivers || [];
+    const areaDrivers = block2.areaDrivers || [];
+
+    // 從兩個集合裡找「我的那一筆」
+    // - 轉運：driver = 姓名(轉)
+    // - 區配：driver = 姓名(區)（可能帶尾巴數字 -> 我們用 strip 來比）
+    const meTransfer = transferDrivers.find(x => stripTrailingDigits(x.driver) === driverName);
+    const meArea = areaDrivers.find(x => stripTrailingDigits(x.driver) === driverName);
+
+    const sections = [];
+
+    // 轉運區塊
+    if (meTransfer && (meTransfer.items || []).length){
+      sections.push(renderTransferSection(meTransfer));
     }
 
-    // 依提貨點分組（沿用 pickup/dropoff）
-    const byPickup = new Map();
-    for (const it of items){
-      const k = (it.pickup || "").trim() || "(未填提貨)";
-      if (!byPickup.has(k)) byPickup.set(k, []);
-      byPickup.get(k).push(it);
+    // 區配區塊
+    if (meArea && (meArea.items || []).length){
+      sections.push(renderAreaSection(meArea));
     }
 
-    for (const [pickup, arr] of byPickup.entries()){
-      const det = document.createElement("details");
-      det.open = true;
+    const allCount =
+      (meTransfer ? num(meTransfer.count) : 0) +
+      (meArea ? num(meArea.count) : 0);
 
-      const totalBoards = arr.reduce((s,x)=>s + Number(x.boards||0), 0);
-      det.innerHTML = `
-        <summary>
-          <div class="sumline">
-            <div class="sumtitle">${esc(pickup)}</div>
-            <div class="sumright">${esc(arr.length)} 筆｜共 ${esc(totalBoards)} 版</div>
-          </div>
-        </summary>
-      `;
+    const allBoards =
+      (meTransfer ? num(meTransfer.totalBoards) : 0) +
+      (meArea ? num(meArea.totalBoards) : 0);
 
-      arr.forEach(it=>{
-        const task = document.createElement("div");
-        task.className = "task";
+    el("chipCount").textContent = `筆數：${allCount}`;
+    el("chipBoards").textContent = `總版數：${allBoards}`;
 
-        const meta = [];
-        if (it.grade) meta.push(`等級：${esc(it.grade)}`);
-        if (it.owner) meta.push(`貨主：${esc(it.owner)}`);
-        if (it.carNo) meta.push(`車號：${esc(it.carNo)}`);
-        const meta2 = [];
-        if (it.note) meta2.push(`備註：${esc(it.note)}`);
+    const body = el("taskBody");
+    body.innerHTML = "";
 
-        task.innerHTML = `
-          <div class="taskTop">
-            <div class="taskMain">${esc(it.pickup || "")} → ${esc(it.dropoff || "")}</div>
-            <div class="taskBoards">${esc(it.boards ?? "")} 版</div>
-          </div>
-          <div class="taskMeta">${meta.join(" ｜ ")}</div>
-          ${meta2.length ? `<div class="taskMeta">${meta2.join(" ｜ ")}</div>` : ""}
-        `;
-        det.appendChild(task);
-      });
-
-      card.appendChild(det);
+    if (sections.length === 0){
+      el("noTasks").style.display = "block";
+      body.innerHTML = `<div class="empty">今日沒有你的任務</div>`;
+      return;
     }
 
-    return card;
+    el("noTasks").style.display = "none";
+    sections.forEach(s => body.appendChild(s));
   }
 
-  // ===== 渲染：區配 =====
-  function renderAreaSection(driverName, daily){
-    const areaDrivers = daily?.block2?.areaDrivers || [];
-    const target = normalizeDriverName(driverName);
+  function renderTransferSection(d){
+    const wrap = document.createElement("div");
+    wrap.className = "routeGroup";
 
-    // areaDrivers.driver 後端已是乾淨名（我在 GAS 用 parseNameWithSeq_ 拿掉尾碼數字）
-    const d = areaDrivers.find(x => normalizeDriverName(x.driver) === target);
-    const items = d?.items || [];
-
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `<h2>🟣 區配任務</h2>`;
-
-    if (!items.length){
-      const div = document.createElement("div");
-      div.className = "empty";
-      div.textContent = "今天沒有區配任務。";
-      card.appendChild(div);
-      return card;
-    }
-
-    const det = document.createElement("details");
-    det.open = true;
-
-    const totalBoards = items.reduce((s,x)=>s + Number(x.boards||0), 0);
-    det.innerHTML = `
-      <summary>
-        <div class="sumline">
-          <div class="sumtitle">今日區配清單</div>
-          <div class="sumright">${esc(items.length)} 筆｜共 ${esc(totalBoards)} 版</div>
-        </div>
-      </summary>
+    wrap.innerHTML = `
+      <div class="routeGroupTitle">
+        <div class="t">🚚 轉運</div>
+        <div class="n">${num(d.totalBoards)} 版</div>
+      </div>
+      <div class="routeGroupList"></div>
     `;
 
-    items.forEach((it, idx)=>{
+    const listEl = wrap.querySelector(".routeGroupList");
+    // items 已經是「同提->同到合併後」或未合併都可，這裡直接吃
+    (d.items || []).forEach(t=>{
+      const tag = (safeText(t.grade).toUpperCase() === "H") ? "H" : "S";
+      const metaParts = [];
+      if (t.carNo) metaParts.push(`車號:${safeText(t.carNo)}`);
+      if (t.owner) metaParts.push(`貨主:${safeText(t.owner)}`);
+      if (t.note) metaParts.push(`備註:${safeText(t.note)}`);
+      const sub = metaParts.join(" ｜ ");
+
       const task = document.createElement("div");
       task.className = "task";
-
-      // seq 由後端排序，前端顯示：若沒有 seq 用 idx+1
-      const seq = (it.seq !== null && it.seq !== undefined && isFinite(Number(it.seq)))
-        ? Number(it.seq)
-        : (idx + 1);
-
-      const meta = [];
-      if (it.grade) meta.push(`等級：${esc(it.grade)}`);
-      if (it.owner) meta.push(`貨主：${esc(it.owner)}`);
-      if (it.carNo) meta.push(`車號：${esc(it.carNo)}`);
-      if (it.receiver) meta.push(`收件人：${esc(it.receiver)}`);
-
-      const meta2 = [];
-      if (it.note) meta2.push(`備註：${esc(it.note)}`);
-      if (it.orderNo) meta2.push(`訂單：${esc(it.orderNo)}`);
-
       task.innerHTML = `
-        <div class="taskTop">
-          <div class="taskMain"><span class="seq">順序 ${esc(seq)}</span>${esc(it.pickup || "")} → ${esc(it.dropoff || "")}</div>
-          <div class="taskBoards">${esc(it.boards ?? "")} 版</div>
+        <div class="tag ${gradeClass(tag)}">${tag}</div>
+        <div class="route">
+          <div class="main">${safeText(t.pickup)} → ${safeText(t.dropoff)}</div>
+          <div class="sub">${sub || ""}</div>
         </div>
-        <div class="taskMeta">${meta.join(" ｜ ")}</div>
-        ${meta2.length ? `<div class="taskMeta">${meta2.join(" ｜ ")}</div>` : ""}
+        <div class="boards">${num(t.boards)} 版</div>
       `;
-      det.appendChild(task);
+      listEl.appendChild(task);
     });
 
-    card.appendChild(det);
-    return card;
+    return wrap;
   }
 
-  function renderDailyAll(driverName, chosenDate, baseToday, daily){
-    const root = $("content");
-    root.innerHTML = "";
+  // ✅ 區配：主顯示「提貨點 → 收件人(K)」，點開看地址(H/I)
+  function renderAreaSection(d){
+    const wrap = document.createElement("div");
+    wrap.className = "routeGroup";
 
-    const pretty = prettyDriverName(driverName);
+    wrap.innerHTML = `
+      <div class="routeGroupTitle">
+        <div class="t">🟣 區配 <span class="badgeArea">收件人優先顯示</span></div>
+        <div class="n">${num(d.totalBoards)} 版</div>
+      </div>
+      <div class="routeGroupList"></div>
+    `;
 
-    // 顯示：頂部資訊
-    showTopbar(pretty, chosenDate, baseToday);
+    const listEl = wrap.querySelector(".routeGroupList");
 
-    const hasTransfer = !!(daily?.block2?.transferDrivers || []).find(x => normalizeDriverName(x.driver) === normalizeDriverName(driverName));
-    const hasArea = !!(daily?.block2?.areaDrivers || []).find(x => normalizeDriverName(x.driver) === normalizeDriverName(driverName));
+    const items = (d.items || []).slice().sort((a,b)=>{
+      const sa = (a.seq != null) ? Number(a.seq) : 999999;
+      const sb = (b.seq != null) ? Number(b.seq) : 999999;
+      if (sa !== sb) return sa - sb;
+      return num(b.boards) - num(a.boards);
+    });
 
-    // Tabs 開啟
-    setupTabs();
+    items.forEach(x=>{
+      const tag = (safeText(x.grade).toUpperCase() === "H") ? "H" : "S";
+      const recvName = safeText(x.receiverName) || "(未填收件人)";
+      const main = `${safeText(x.pickup)} → ${recvName}`;
 
-    // 依 tab 顯示
-    const sections = [];
-    if (currentTabView === "all" || currentTabView === "transfer") {
-      sections.push(renderTransferSection(driverName, daily));
-    }
-    if (currentTabView === "all" || currentTabView === "area") {
-      sections.push(renderAreaSection(driverName, daily));
-    }
+      const meta = [];
+      if (x.carNo) meta.push(`車號:${safeText(x.carNo)}`);
+      if (x.owner) meta.push(`貨主:${safeText(x.owner)}`);
+      if (x.note)  meta.push(`備註:${safeText(x.note)}`);
+      const sub1 = meta.join(" ｜ ");
 
-    // 如果兩個都沒任務，給總提示
-    if (!hasTransfer && !hasArea) {
-      const c = document.createElement("div");
-      c.className = "card";
-      c.innerHTML = `
-        <h2>📭 今日沒有任務</h2>
-        <div class="muted">
-          可能原因：<br/>
-          1) 今天沒有派到任務<br/>
-          2) 司機姓名不一致（系統會忽略數字，但中文字需一致）<br/>
-          3) 管理員尚未在今日分頁填入你的資料
+      const task = document.createElement("div");
+      task.className = "task";
+      task.innerHTML = `
+        <div class="tag ${gradeClass(tag)}">${tag}</div>
+        <div class="route">
+          <div class="main">${main}</div>
+          <div class="sub">${sub1 || ""}</div>
         </div>
+        <div class="boards">${num(x.boards)} 版</div>
       `;
-      root.appendChild(c);
-      return;
-    }
 
-    sections.forEach(s => root.appendChild(s));
-  }
-
-  // ===== 綁定 UI =====
-  function showBindUI(show, hintHtml){
-    $("bindCard").style.display = show ? "block" : "none";
-    $("bindHint").innerHTML = hintHtml || "";
-  }
-
-  async function doBind(){
-    const name = ($("bindName").value || "").trim();
-    if (!name) {
-      $("bindHint").innerHTML = `<span style="color:var(--warn)">請輸入姓名</span>`;
-      return;
-    }
-
-    $("bindBtn").disabled = true;
-    $("bindBtn").textContent = "綁定中…";
-    $("bindHint").innerHTML = `正在綁定，請稍候…`;
-
-    try{
-      const res = await callBindJsonp({ uid: currentUserId, driverName: name });
-      if (!res || res.ok === false) {
-        const msg = res?.message || "綁定失敗";
-        $("bindHint").innerHTML = `<span style="color:var(--bad)">綁定失敗：</span>${esc(msg)}`;
-      } else {
-        $("bindHint").innerHTML = `<span style="color:var(--good)">✅ 綁定成功</span>，即將載入任務…`;
-        // 綁定完直接重抓任務
-        await fetchDaily($("dateSelect").value || "");
-      }
-    } catch(e){
-      $("bindHint").innerHTML = `<span style="color:var(--bad)">綁定失敗：</span>${esc(e?.message || e)}`;
-    } finally {
-      $("bindBtn").disabled = false;
-      $("bindBtn").textContent = "立即綁定";
-    }
-  }
-
-  // ===== 讀任務 =====
-  async function fetchDaily(dateTab){
-    setStatus("讀取任務中…", "warn");
-
-    try{
-      const res = await callApiJsonp({ uid: currentUserId, date: dateTab });
-
-      // Debug 永遠顯示 userId
-      setDebug(
-        `lineUserId：<code>${esc(currentUserId || "(未取得)")}</code><br/>` +
-        `網址：<code>${esc(location.href)}</code><br/>` +
-        `GAS：<code>${esc(GAS_EXEC_URL)}</code>`
-      );
-
-      if (!res || res.ok === false) {
-        const msg = res?.message || "目前無法讀取任務";
-        // 若是未綁定，顯示綁定 UI
-        const isNotBound = /尚未綁定|請在畫面內輸入姓名完成綁定|enabled/i.test(msg);
-        if (isNotBound) {
-          setStatus("尚未綁定，請輸入姓名完成綁定", "warn");
-          showBindUI(true, `你的 LINE 身分已取得，可直接綁定。`);
-        } else {
-          setStatus("目前無法讀取任務，請稍後再試或聯絡管理員", "bad");
-          showBindUI(false, "");
-        }
-
-        // 內容區顯示簡潔訊息
-        $("content").innerHTML = `
-          <div class="card">
-            <h2>📌 狀態</h2>
-            <div class="muted">${esc(msg)}</div>
+      const addrDet = document.createElement("details");
+      addrDet.style.marginTop = "6px";
+      addrDet.innerHTML = `
+        <summary>
+          <div class="driverHeader">
+            <div class="driverName"><span class="seq">#${x.seq != null ? x.seq : "-"}</span>　查看地址</div>
+            <div class="driverMeta">點開看：區配提貨地址 / 收件人地址</div>
           </div>
-        `;
-        return;
-      }
-
-      // OK：隱藏綁定 UI
-      showBindUI(false, "");
-      setStatus("已更新", "good");
-
-      fillDateSelect(res.options, res.chosenDate);
-
-      // 讓重新渲染可用
-      window.__lastRender = () => renderDailyAll(res.driverName, res.chosenDate, res.options?.baseToday, res.daily);
-      window.__lastRender();
-
-    } catch(e){
-      setStatus("目前無法讀取任務，請稍後再試或聯絡管理員", "bad");
-      $("content").innerHTML = `
-        <div class="card">
-          <h2>📌 狀態</h2>
-          <div class="muted">讀取失敗：${esc(e?.message || e)}</div>
+          <div></div>
+        </summary>
+        <div class="accBody">
+          <div class="notice">
+            <div>📍</div>
+            <div>
+              <div class="t">區配提貨地址</div>
+              <div class="d">${safeText(x.pickupAddr) || "(未填)"}</div>
+            </div>
+          </div>
+          <div class="notice">
+            <div>🏁</div>
+            <div>
+              <div class="t">收件人地址</div>
+              <div class="d">${safeText(x.receiverAddr) || "(未填)"}</div>
+            </div>
+          </div>
         </div>
       `;
+
+      const wrap2 = document.createElement("div");
+      wrap2.appendChild(task);
+      wrap2.appendChild(addrDet);
+      listEl.appendChild(wrap2);
+    });
+
+    return wrap;
+  }
+
+  // ====== bind flow ======
+  async function bindMe(uid){
+    const name = safeText(el("inpName").value).trim();
+    if (!name){
+      el("bindMsg").textContent = "請先輸入姓名";
+      el("bindMsg").style.color = "rgba(255,255,255,.85)";
+      return;
+    }
+
+    setLoading(true);
+    el("bindMsg").textContent = "處理中…";
+    el("bindMsg").style.color = "rgba(234,240,255,.82)";
+
+    try{
+      const url = `${GAS_EXEC_URL}?mode=bind_jsonp&uid=${encodeURIComponent(uid)}&driverName=${encodeURIComponent(name)}`;
+      const res = await jsonp(url);
+
+      if (!res || res.ok !== true){
+        throw new Error(res?.message || "綁定失敗");
+      }
+
+      el("bindMsg").textContent = "✅ 綁定成功，正在載入任務…";
+      el("bindMsg").style.color = "rgba(120,240,180,.95)";
+
+      // 綁定後直接拉任務
+      await loadDaily(uid, el("dateSelect").value || "");
+    }catch(err){
+      el("bindMsg").textContent = "❌ " + (err?.message || err);
+      el("bindMsg").style.color = "rgba(255,90,90,.95)";
+      showError(true, "綁定失敗", err?.message || String(err));
+    }finally{
+      setLoading(false);
     }
   }
 
-  // ===== main =====
-  async function main(){
+  // ====== data load ======
+  async function loadDaily(uid, dateTab){
+    setLoading(true);
+    showError(false);
+    showTasks(false);
+
     try{
-      if (typeof liff === "undefined") {
-        setStatus("LIFF SDK 未載入（請用 LINE 開啟或檢查網路）", "bad");
-        setDebug(`錯誤：<code>LIFF SDK undefined</code>`);
-        return;
+      const url = `${GAS_EXEC_URL}?mode=api_jsonp&uid=${encodeURIComponent(uid)}&date=${encodeURIComponent(dateTab || "")}`;
+      const data = await jsonp(url);
+
+      if (!data || data.ok !== true){
+        // 未綁定 → 顯示綁定 UI
+        const msg = safeText(data?.message);
+        if (msg.includes("尚未綁定司機")){
+          showBind(true);
+          showTasks(false);
+          showError(false);
+          setSubtitle("尚未綁定，請輸入姓名");
+          return;
+        }
+        throw new Error(msg || "讀取失敗");
       }
 
-      setStatus("LIFF 初始化中…", "warn");
+      // 成功
+      showBind(false);
+      showTasks(true);
+      showError(false);
+
+      // 日期 options
+      const opt = data.options || {};
+      el("todayPill").textContent = safeText(opt.baseToday || "—");
+      buildDateOptions(opt);
+
+      // 若外部指定 dateTab，保持選項
+      if (dateTab && safeText(dateTab)){
+        el("dateSelect").value = dateTab;
+      }
+
+      renderTasks(data);
+
+      setSubtitle(`已載入：${stripTrailingDigits(data.driverName)}（${safeText(data.chosenDate)}）`);
+      setStatusPill("已登入", "ok");
+    }catch(err){
+      showBind(false);
+      showTasks(false);
+      showError(true, "目前無法讀取任務", err?.message || String(err));
+      setSubtitle("載入失敗");
+      setStatusPill("發生錯誤", "bad");
+    }finally{
+      setLoading(false);
+    }
+  }
+
+  // ====== init ======
+  async function main(){
+    setSubtitle("初始化 LIFF…");
+
+    try{
       await liff.init({ liffId: LIFF_ID });
 
       if (!liff.isLoggedIn()){
-        setStatus("需要登入，跳轉中…", "warn");
-        liff.login({ redirectUri: location.href });
+        setSubtitle("導向登入…");
+        liff.login();
         return;
       }
 
-      setStatus("取得 LINE 身分中…", "warn");
       const profile = await liff.getProfile();
-      currentUserId = profile.userId;
+      const uid = safeText(profile?.userId || "");
 
-      $("topRow").style.display = "flex";
-      $("refreshBtn").onclick = () => fetchDaily($("dateSelect").value || "");
-      $("bindBtn").onclick = doBind;
+      if (!uid){
+        throw new Error("LINE userId 取得失敗（請確認 LIFF scope 有 profile）");
+      }
 
-      // 先抓一次（date 空字串 = 用後端 D）
-      await fetchDaily("");
+      setStatusPill("已登入", "ok");
+      setSubtitle("讀取任務中…");
 
-    } catch(e){
-      setStatus("初始化失敗，請稍後再試或聯絡管理員", "bad");
-      const ua = (navigator.userAgent || "").replace(/</g,"&lt;");
-      setDebug(`錯誤：<code>${esc(e?.message || e)}</code><br/>UA：<code>${ua}</code>`);
+      // 第一次先拉任務（不指定日期，讓後端用 D）
+      await loadDaily(uid, "");
+
+      // 綁定按鈕
+      el("btnBind").addEventListener("click", ()=>bindMe(uid));
+
+      // 重新載入
+      el("btnReload").addEventListener("click", ()=>loadDaily(uid, el("dateSelect").value || ""));
+      el("dateSelect").addEventListener("change", ()=>loadDaily(uid, el("dateSelect").value || ""));
+
+    }catch(err){
+      showError(true, "初始化失敗", err?.message || String(err));
+      setSubtitle("初始化失敗");
+      setStatusPill("尚未登入", "bad");
     }
   }
 
